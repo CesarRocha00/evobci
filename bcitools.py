@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
-from random import randint
+from datetime import datetime
 from sklearn.preprocessing import MinMaxScaler
 from pylsl import StreamInlet, resolve_stream
 from PyQt5.QtMultimediaWidgets import QVideoWidget
@@ -148,9 +148,8 @@ class CheckBoxPanel(QGroupBox):
 		# Create and add new controls
 		row = 0
 		colLimit = self.columns
-		n = len(names)
 		for i, label in enumerate(names):
-			self.color[label] = '#{:06x}'.format(randint(0, 0xFFFFFF))
+			self.color[label] = '#{:06x}'.format(np.random.randint(0, 0xFFFFFF))
 			channel = QCheckBox(label)
 			channel.setStyleSheet('background: {}'.format(self.color[label]))
 			channel.stateChanged.connect(self.newChange)
@@ -237,6 +236,12 @@ class VideoPlayer(QMediaPlayer):
 	def loadMedia(self, fullPath):
 		self.setMedia(QMediaContent(QUrl.fromLocalFile(fullPath)))
 		self.stop()
+
+class EEGPlotter(PlotWidget):
+	"""docstring for EEGPlotter"""
+	def __init__(self):
+		super(EEGPlotter, self).__init__()
+		self.setAn
 
 
 class OCVThread(QThread):
