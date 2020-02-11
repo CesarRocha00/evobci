@@ -1,0 +1,1 @@
+python3 -m pip install numpy pandas matplotlib scipy scikit-learn pylsl PyQt5 pyqtgraph tensorflow 
