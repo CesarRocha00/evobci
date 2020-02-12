@@ -2,8 +2,8 @@ import sys
 import cv2
 import numpy as np
 import pandas as pd
-import pyqtgraph as pg
 from datetime import datetime
+from pyqtgraph import mkPen, PlotWidget
 from sklearn.preprocessing import MinMaxScaler
 from pylsl import StreamInlet, resolve_stream
 from PyQt5.QtMultimediaWidgets import QVideoWidget
@@ -237,11 +237,11 @@ class VideoPlayer(QMediaPlayer):
 		self.setMedia(QMediaContent(QUrl.fromLocalFile(fullPath)))
 		self.stop()
 
+
 class EEGPlotter(PlotWidget):
 	"""docstring for EEGPlotter"""
 	def __init__(self):
 		super(EEGPlotter, self).__init__()
-		self.setAn
 
 
 class OCVThread(QThread):
@@ -278,6 +278,7 @@ class OCVThread(QThread):
 
 	def stop(self):
 		self.state = self.StoppedState
+		self.quit()
 
 	def run(self):
 		while True:
@@ -327,6 +328,7 @@ class LSLThread(QThread):
 
 	def stop(self):
 		self.state = self.StoppedState
+		self.quit()
 
 	def reset(self):
 		self.state = self.RecordingState
@@ -351,6 +353,8 @@ class EEGRecorder(QMainWindow):
 		self.setWindowTitle('EEG Recorder')
 		self.resize(480,640)
 		self.setContentsMargins(10, 10, 10, 10)
+		# Elapsed time holder
+		self.elapsed = 0
 		# Main widgets
 		self.fileDialog = FilePathDialog('Video file', 'Open video', 'Video files (*.mp4)')
 		self.connectionForm = LSLForm('Lab Streaming Layer')
@@ -359,10 +363,10 @@ class EEGRecorder(QMainWindow):
 		self.player = VideoPlayer()
 		self.player.setSize(640, 480)
 		self.player.mediaStatusChanged.connect(self.videoStatusTrigger)
+		self.player.error.connect(self.mediaError)
 		# Threads
 		self.lsl = LSLThread()
 		self.camera = OCVThread()
-		self.camera.setSource(0)
 		# Buttons
 		self.loadButton = QPushButton('Load')
 		self.loadButton.clicked.connect(self.loadVideo)
@@ -406,16 +410,26 @@ class EEGRecorder(QMainWindow):
 	def loadVideo(self):
 		path = self.fileDialog.getFullPath()
 		self.player.loadMedia(path)
-		self.player.show()
+		if self.player.isVideoAvailable():
+			self.player.show()
+		self.camera.setSource(0)
 		self.startButton.setEnabled(True)
+
+	def mediaError(self):
+		self.statusBar.showMessage('Error: {}'.format(self.player.errorString()))
 
 	def startRecording(self):
 		server = self.connectionForm.getValues()['server']
+		if server == '':
+			self.statusBar.showMessage('¡LSL server not specified!')
+			return
 		self.lsl.reset()
 		self.lsl.setStream('name', server)
 		self.lsl.start()
 		self.camera.start()
-		self.player.play()
+		self.elapsed = datetime.now()
+		if self.player.isVideoAvailable():
+			self.player.play()
 		self.statusBar.showMessage('Recording...')
 		self.pauseResumeButton.setEnabled(True)
 		self.stopSaveButton.setEnabled(True)
@@ -428,73 +442,93 @@ class EEGRecorder(QMainWindow):
 		else:
 			self.pauseResumeButton.setText('Resume')
 			self.statusBar.showMessage('Paused!')
-		self.player.toggle()
 		self.lsl.toggle()
 		self.camera.toggle()
+		if self.player.isVideoAvailable():
+			self.player.toggle()
 
 	def stopAndSave(self):
 		self.lsl.stop()
 		self.camera.stop()
+		self.elapsed = datetime.now() - self.elapsed
 		self.statusBar.showMessage('Stopping LSL thread...')
 		while not self.lsl.isFinished():
 			pass
 		self.statusBar.showMessage('LSL thread finished!')
-		self.player.stop()
-		self.player.hide()
+		if self.player.isVideoAvailable():
+			self.player.stop()
+			self.player.hide()
 		path = QFileDialog.getExistingDirectory(self, 'Select folder', QDir.homePath(), QFileDialog.ShowDirsOnly)
 		if path != '':
+			path += '/'
 			self.saveDataAndVideo(path)
 		else:
-			self.statusBar.showMessage('The file was not saved... data is lost!')
+			self.statusBar.showMessage('Files were not saved... data is lost!')
 		self.pauseResumeButton.setEnabled(False)
 		self.stopSaveButton.setEnabled(False)
 		self.startButton.setEnabled(False)
 
-	def saveDataAndVideo(self, path):
+	def getFileNames(self, path):
+		# File counter
 		i = 1
 		# Get personal information
 		subject = self.personalForm.getValues()
 		# Create the file base name
-		baseName = '/{}_{}_{}_{}'.format(subject['name'], subject['last'], subject['age'], subject['sex'])
+		baseName = '{}-{}-{}-{}'.format(subject['name'], subject['last'], subject['age'], subject['sex'])
+		# Get current date and compute elapsed time in minutes
+		time = self.elapsed.total_seconds() // 60
+		date = datetime.today().strftime('%Y-%m-%d')
+		# Add elapsed time and date
+		baseName += '_{}m_{}'.format(time, date)
 		# Add file extension
 		fileName = baseName + '_{}.csv'.format(i)
 		# Complete the full path
-		fullPath =  path + fileName
+		dataFullPath =  path + fileName
 		# Evaluate if the file name is already used
-		while QFile(fullPath).exists():
+		while QFile(dataFullPath).exists():
 			i += 1
 			fileName = baseName + '_{}.csv'.format(i)
-			fullPath =  path + fileName
+			dataFullPath =  path + fileName
+		# Create a new full path to store the video file
+		fileName = baseName + '_{}.avi'.format(i)
+		videoFullPath = path + fileName
+		# Return data and video full paths
+		return (dataFullPath, videoFullPath)
+
+	def saveDataAndVideo(self, path):
+		# Get valid file names
+		dataFullPath, videoFullPath = self.getFileNames(path)
 		# Get the EEG data
 		D = self.lsl.getData()
 		# Get the EEG channels
-		channels = self.connectionForm.getValues()['channels'].strip().split(',')
+		channels = self.connectionForm.getValues()['channels'].strip()
+		if channels != '':
+			channels = channels.split(',')
+		else:
+			channels = range(1, len(D[0]) + 1)
 		# Create a new DataFrame
 		file = pd.DataFrame(D, columns=channels)
 		# Export DataFrame to CSV
-		file.to_csv(fullPath, index=False)
-		self.statusBar.showMessage('EEG file saved on {} as {}'.format(path, fileName))
-		# Create a new full path to store the video file
-		fileName = baseName + '_{}.avi'.format(i)
-		fullPath = path + fileName
+		file.to_csv(dataFullPath, index=False)
+		self.statusBar.showMessage('EEG file saved as {}'.format(dataFullPath))
 		# Get and count all recorded frames
 		F = self.camera.getFrames()
 		total_frames = len(F)
 		# Compute the elapsed time
-		duration = self.player.getDuration()
-		total_seconds = duration / 1000
+		total_seconds = self.elapsed.total_seconds()
+		print('Duration:', total_seconds)
 		# Compute FPS
 		fps = total_frames / total_seconds
 		print('FPS:', fps)
 		# Set the video codec
 		codec = cv2.VideoWriter_fourcc(*"XVID")
 		# Prepare the output file writer
-		file = cv2.VideoWriter(fullPath, codec, fps, (320, 240))
+		file = cv2.VideoWriter(videoFullPath, codec, fps, (320, 240))
 		# Write frames on file
 		for frame in F:
 			file.write(frame)
 		file.release()
-		self.statusBar.showMessage('Video file saved on {} as {}'.format(path, fileName))
+		self.statusBar.showMessage('Video file saved as {}'.format(videoFullPath))
 
 
 class EEGLabeling(QMainWindow):
