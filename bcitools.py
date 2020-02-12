@@ -224,6 +224,9 @@ class VideoPlayer(QMediaPlayer):
 	def hide(self):
 		self.view.hide()
 
+	def isVisible(self):
+		return self.view.isVisible()
+
 	def setSize(self, width, height):
 		self.view.resize(width, height)
 
@@ -362,7 +365,7 @@ class EEGRecorder(QMainWindow):
 		# Video player
 		self.player = VideoPlayer()
 		self.player.setSize(640, 480)
-		self.player.mediaStatusChanged.connect(self.videoStatusTrigger)
+		self.player.mediaStatusChanged.connect(self.mediaStatusTrigger)
 		self.player.error.connect(self.mediaError)
 		# Threads
 		self.lsl = LSLThread()
@@ -403,17 +406,20 @@ class EEGRecorder(QMainWindow):
 		self.statusBar.showMessage('¡System ready!')
 		self.setStatusBar(self.statusBar)
 
-	def videoStatusTrigger(self, status):
-		if status == self.player.EndOfMedia:
-			self.stopAndSave()
-
 	def loadVideo(self):
 		path = self.fileDialog.getFullPath()
 		self.player.loadMedia(path)
-		if self.player.isVideoAvailable():
-			self.player.show()
 		self.camera.setSource(0)
 		self.startButton.setEnabled(True)
+
+	def mediaStatusTrigger(self, status):
+		if status == self.player.LoadingMedia:
+			self.statusBar.showMessage('Loading video...')
+		elif status == self.player.LoadedMedia:
+			self.player.show()
+			self.statusBar.showMessage('Video was successfully loaded!')
+		elif status == self.player.EndOfMedia:
+			self.stopAndSave()
 
 	def mediaError(self):
 		self.statusBar.showMessage('Error: {}'.format(self.player.errorString()))
@@ -434,6 +440,7 @@ class EEGRecorder(QMainWindow):
 		self.pauseResumeButton.setEnabled(True)
 		self.stopSaveButton.setEnabled(True)
 		self.startButton.setEnabled(False)
+		self.loadButton.setEnabled(False)
 
 	def pauseAndResume(self):
 		if self.lsl.getState() == LSLThread.PausedState:
@@ -467,6 +474,7 @@ class EEGRecorder(QMainWindow):
 		self.pauseResumeButton.setEnabled(False)
 		self.stopSaveButton.setEnabled(False)
 		self.startButton.setEnabled(False)
+		self.loadButton.setEnabled(True)
 
 	def getFileNames(self, path):
 		# File counter
