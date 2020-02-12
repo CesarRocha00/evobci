@@ -475,11 +475,10 @@ class EEGRecorder(QMainWindow):
 		subject = self.personalForm.getValues()
 		# Create the file base name
 		baseName = '{}-{}-{}-{}'.format(subject['name'], subject['last'], subject['age'], subject['sex'])
-		# Get current date and compute elapsed time in minutes
-		time = self.elapsed.total_seconds() // 60
+		# Get current date
 		date = datetime.today().strftime('%Y-%m-%d')
 		# Add elapsed time and date
-		baseName += '_{}m_{}'.format(time, date)
+		baseName += '_{}'.format(date)
 		# Add file extension
 		fileName = baseName + '_{}.csv'.format(i)
 		# Complete the full path
@@ -516,10 +515,10 @@ class EEGRecorder(QMainWindow):
 		total_frames = len(F)
 		# Compute the elapsed time
 		total_seconds = self.elapsed.total_seconds()
-		print('Duration:', total_seconds)
 		# Compute FPS
 		fps = total_frames / total_seconds
 		print('FPS:', fps)
+		print('Duration: {} seconds'.format(total_seconds))
 		# Set the video codec
 		codec = cv2.VideoWriter_fourcc(*"XVID")
 		# Prepare the output file writer
