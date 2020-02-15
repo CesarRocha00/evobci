@@ -3,16 +3,16 @@ import cv2
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from pyqtgraph import mkPen, PlotWidget
+from pyqtgraph import mkPen, GraphicsLayoutWidget
 from sklearn.preprocessing import MinMaxScaler
 from pylsl import StreamInlet, resolve_stream
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
-from PyQt5.QtCore import (Qt, QDir, QUrl, QFile, QTime, QTimer, QThread, 
+from PyQt5.QtCore import (Qt, QDir, QUrl, QFile, QTime, QTimer, QThread,
 						  pyqtSignal as Signal, pyqtSlot as Slot)
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QStatusBar, QVBoxLayout,
-							 QHBoxLayout, QPushButton, QWidget, QGroupBox, QLineEdit, 
-							 QSizePolicy, QSlider, QStyle, QFileDialog, QRadioButton, 
+							 QHBoxLayout, QPushButton, QWidget, QGroupBox, QLineEdit,
+							 QSizePolicy, QSlider, QStyle, QFileDialog, QRadioButton,
 							 QFormLayout, QGridLayout, QDesktopWidget, QCheckBox)
 
 __version__ = '0.1'
@@ -126,7 +126,7 @@ class PersonalInformationForm(QGroupBox):
 		values[self.fields[-1]] = self.control[self.fields[-1]].getChecked()
 		return values
 
-		
+
 class CheckBoxPanel(QGroupBox):
 	"""docstring for CheckBoxPanel"""
 	def __init__(self, title=None, flat=False, columns=10):
@@ -141,7 +141,7 @@ class CheckBoxPanel(QGroupBox):
 		self.setLayout(self.layout)
 		self.color = dict()
 		self.control = list()
-		self.checked = None
+		self.checked = list()
 
 	def setChannels(self, names):
 		self.reset()
@@ -241,30 +241,142 @@ class VideoPlayer(QMediaPlayer):
 		self.stop()
 
 
-class EEGPlotter(PlotWidget):
+class EEGPlotter(QThread):
 	"""docstring for EEGPlotter"""
-	def __init__(self):
+	
+	StoppedState = 0
+	PausedState = 1
+	RunningState = 2
+
+	def __init__(self, mode='single', rows=4):
 		super(EEGPlotter, self).__init__()
+		self.mode = mode
+		self.rows = rows
+		self.view = GraphicsLayoutWidget()
+		self.state = self.StoppedState
+		self.plotItem = list()
+		self.plotTrace = dict()
+		# Holders
+		self.wsize = None
+		self.delay = None
+		self.color = None
+		self.window = None
+		self.channel = None
+
+	def widget(self):
+		return self.view
+
+	def show(self):
+		self.view.show()
+
+	def hide(self):
+		self.view.hide()
+
+	def setSize(self, width, height):
+		self.view.resize(width, height)
+
+	def configure(self, channel, color, wsize=None):
+		# Link params
+		self.wsize = wsize
+		self.color = color
+		self.channel = channel
+		if wsize != None:
+			hsize = wsize / 2
+			self.window = np.array([-hsize, hsize])
+		# Remove previous items and traces
+		self.clear()
+		self.plotItem.clear()
+		self.plotTrace.clear()
+		# Create new canvas
+		if self.mode == 'single':
+			self.singleLayout()
+		else:
+			self.multipleLayout()
+
+	def plotData(self, D):
+		for ch in self.channel:
+			self.plotTrace[ch].setData(D[ch])
+
+	def singleLayout(self):
+		canvas = self.view.addPlot(0, 0)
+		canvas.setAntialiasing(True)
+		canvas.setClipToView(True)
+		canvas.setDownsampling(mode='peak')
+		canvas.disableAutoRange()
+		# canvas.setRange(yRange=[0,1])
+		for ch in self.channel:
+			pen = mkPen(color=self.color[ch], width=2)
+			self.plotTrace[ch] = canvas.plot(pen=pen)
+		self.plotItem.append(canvas)
+
+	def multipleLayout(self):
+		col = 0
+		rowLimit = self.rows
+		for i, ch in enumerate(channel):
+			pen = mkPen(color=self.color[ch], width=2)
+			canvas = self.view.addPlot(i % rowLimit, col)
+			canvas.setAntialiasing(True)
+			canvas.setClipToView(True)
+			canvas.setDownsampling(mode='peak')
+			canvas.disableAutoRange()
+			# canvas.setRange(yRange=[0,1])
+			self.plotItem.append(canvas)
+			self.plotTrace[ch] = canvas.plot(pen=pen)
+			if (i + 1) % rowLimit == 0:
+				col += 1
+
+	def findIndex(self, index):
+		index -= 1
+		hsize = self.wsize / 2
+		self.window[0] = index - hsize
+		self.window[1] = index + hsize
+		self.update()
+
+	def update(self):
+		self.window += 1
+		for plot in self.plotItem:
+			plot.setRange(xRange=self.window)
+
+	def play(self):
+		self.state = self.RunningState
+
+	def pause(self):
+		self.state = self.PausedState
+
+	def toggle(self):
+		self.state = self.PausedState if self.state == self.RunningState else self.RunningState
+
+	def stop(self):
+		self.state = self.StoppedState
+		self.quit()
+
+	def run(self):
+		while True:
+			if self.state == self.RunningState:
+				self.update()
+			elif self.state == self.PausedState:
+				pass
+			else:
+				break
 
 
-class OCVThread(QThread):
-	"""docstring for OCVThread"""
+class OCVWebcam(QThread):
+	"""docstring for OCVWebcam"""
 
 	StoppedState = 0
 	PausedState = 1
 	RecordingState = 2
 
 	def __init__(self):
-		super(OCVThread, self).__init__()
+		super(OCVWebcam, self).__init__()
 		self.F = list()
 		self.source = None
-		self.state = self.RecordingState
+		self.state = self.StoppedState
 
 	def setSource(self, src):
 		self.source = cv2.VideoCapture(src)
 		self.source.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
 		self.source.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-		self.state = self.RecordingState
 		self.F.clear()
 
 	def getFrames(self):
@@ -293,26 +405,28 @@ class OCVThread(QThread):
 			else:
 				break
 		self.source.release()
-		
-		
-class LSLThread(QThread):
-	"""docstring for LSLThread"""
-	
+
+
+class LSLClient(QThread):
+	"""docstring for LSLClient"""
+
 	StoppedState = 0
 	PausedState = 1
 	RecordingState = 2
 
 	def __init__(self):
-		super(LSLThread, self).__init__()
+		super(LSLClient, self).__init__()
 		self.D = list()
 		self.T = list()
-		self.state = self.RecordingState
+		self.state = self.StoppedState
 		self.streams = None
 		self.inlet = None
 
 	def setStream(self, tag, value):
 		self.streams = resolve_stream(tag, value)
 		self.inlet = StreamInlet(self.streams[0])
+		self.D.clear()
+		self.T.clear()
 
 	def getData(self):
 		return self.D
@@ -332,11 +446,6 @@ class LSLThread(QThread):
 	def stop(self):
 		self.state = self.StoppedState
 		self.quit()
-
-	def reset(self):
-		self.state = self.RecordingState
-		self.D.clear()
-		self.T.clear()
 
 	def run(self):
 		while True:
@@ -359,7 +468,7 @@ class EEGRecorder(QMainWindow):
 		# Elapsed time holder
 		self.elapsed = 0
 		# Main widgets
-		self.fileDialog = FilePathDialog('Video file', 'Open video', 'Video files (*.mp4)')
+		self.videoDialog = FilePathDialog('Video file:', 'Open video', 'Video files (*.mp4)')
 		self.connectionForm = LSLForm('Lab Streaming Layer')
 		self.personalForm = PersonalInformationForm('Personal Information')
 		# Video player
@@ -368,8 +477,8 @@ class EEGRecorder(QMainWindow):
 		self.player.mediaStatusChanged.connect(self.mediaStatusTrigger)
 		self.player.error.connect(self.mediaError)
 		# Threads
-		self.lsl = LSLThread()
-		self.camera = OCVThread()
+		self.lsl = LSLClient()
+		self.camera = OCVWebcam()
 		# Buttons
 		self.loadButton = QPushButton('Load')
 		self.loadButton.clicked.connect(self.loadVideo)
@@ -388,7 +497,7 @@ class EEGRecorder(QMainWindow):
 		buttonLayout.addWidget(self.pauseResumeButton)
 		buttonLayout.addWidget(self.stopSaveButton)
 		mainLayout = QVBoxLayout()
-		mainLayout.addWidget(self.fileDialog, 1)
+		mainLayout.addWidget(self.videoDialog, 1)
 		mainLayout.addStretch(1)
 		mainLayout.addWidget(self.loadButton)
 		mainLayout.addStretch(1)
@@ -407,12 +516,15 @@ class EEGRecorder(QMainWindow):
 		self.setStatusBar(self.statusBar)
 
 	def loadVideo(self):
-		path = self.fileDialog.getFullPath()
+		path = self.videoDialog.getFullPath()
 		self.player.loadMedia(path)
 		self.camera.setSource(0)
 		self.startButton.setEnabled(True)
 
 	def mediaStatusTrigger(self, status):
+		print(status)
+		print('Player state:', self.player.state())
+		print('Media status:', self.player.mediaStatus())
 		if status == self.player.LoadingMedia:
 			self.statusBar.showMessage('Loading video...')
 		elif status == self.player.LoadedMedia:
@@ -429,9 +541,10 @@ class EEGRecorder(QMainWindow):
 		if server == '':
 			self.statusBar.showMessage('¡LSL server not specified!')
 			return
-		self.lsl.reset()
 		self.lsl.setStream('name', server)
+		self.lsl.record()
 		self.lsl.start()
+		self.camera.record()
 		self.camera.start()
 		self.elapsed = datetime.now()
 		if self.player.isVideoAvailable():
@@ -443,7 +556,7 @@ class EEGRecorder(QMainWindow):
 		self.loadButton.setEnabled(False)
 
 	def pauseAndResume(self):
-		if self.lsl.getState() == LSLThread.PausedState:
+		if self.lsl.getState() == LSLClient.PausedState:
 			self.pauseResumeButton.setText('Pause')
 			self.statusBar.showMessage('Recording...')
 		else:
@@ -543,8 +656,110 @@ class EEGLabeling(QMainWindow):
 	def __init__(self):
 		super(EEGLabeling, self).__init__()
 		self.setWindowTitle('EEG Labeling')
-		self.resize(1280, 720)
 		self.setContentsMargins(10, 10, 10, 10)
+		# Variables
+		self.D = None
+		# Main widgets
+		self.fileDialog = FilePathDialog('EEG file:', 'Open file', 'EEG files (*.csv)')
+		self.videoDialog = FilePathDialog('Video file:', 'Open video', 'Video files (*.mp4)')
+		self.channelPanel = CheckBoxPanel(title='Channels')
+		self.filteringForm = FilteringForm(title='Filtering')
+		# Video player
+		self.player = VideoPlayer()
+		self.player.setSize(640, 480)
+		self.player.error.connect(self.mediaError)
+		# Threads
+		self.eegView = EEGPlotter(mode='single')
+		# Tools
+		self.scaler = MinMaxScaler()
+		# EditLines
+		self.wsizeEdit = QLineEdit('250')
+		self.wsizeEdit.setAlignment(Qt.AlignCenter)
+		self.timeEdit = QLineEdit('--:--:--')
+		self.timeEdit.setAlignment(Qt.AlignCenter)
+		self.indexEdit = QLineEdit('0')
+		self.indexEdit.setAlignment(Qt.AlignCenter)
+		# Buttons
+		self.loadButton = QPushButton('Load')
+		self.saveButton = QPushButton('Save')
+		self.addButton = QPushButton('Add')
+		self.applyButton = QPushButton('Apply')
+		self.playButton = QPushButton('Play')
+		self.stopButton = QPushButton('Stop')
+		self.findTimeButton = QPushButton('Time')
+		self.findIndexButton = QPushButton('Index')
+		# Slider
+		self.positionSlider = QSlider(Qt.Horizontal)
+		self.positionSlider.setRange(0, 1)
+		# GroupBoxes
+		windowGBox = QGroupBox('Window')
+		windowGBox.setAlignment(Qt.AlignCenter)
+		searchGBox = QGroupBox('Search')
+		searchGBox.setAlignment(Qt.AlignCenter)
+		labelingGBox = QGroupBox('Labeling')
+		labelingGBox.setAlignment(Qt.AlignCenter)
+		# Layouts
+		sourceLayout = QGridLayout()
+		sourceLayout.setVerticalSpacing(0)
+		sourceLayout.addWidget(self.fileDialog, 0, 0)
+		sourceLayout.addWidget(self.videoDialog, 1, 0)
+		sourceLayout.addWidget(self.loadButton, 0, 1, 2, 1)
+
+		windowLayout = QVBoxLayout()
+		windowLayout.addWidget(QLabel('Num. samples'), alignment=Qt.AlignCenter)
+		windowLayout.addWidget(self.wsizeEdit, alignment=Qt.AlignCenter)
+		windowGBox.setLayout(windowLayout)
+
+		paramsLayout = QHBoxLayout()
+		paramsLayout.addWidget(self.filteringForm, 8)
+		paramsLayout.addWidget(windowGBox, 1)
+		paramsLayout.addWidget(self.applyButton,1)
+
+		searchLayout = QGridLayout()
+		searchLayout.addWidget(self.timeEdit, 0, 0, 1, 2, alignment=Qt.AlignCenter)
+		searchLayout.addWidget(self.findTimeButton, 1, 0)
+		searchLayout.addWidget(self.findIndexButton, 1, 1)
+		searchGBox.setLayout(searchLayout)
+
+		labelingLayout = QGridLayout()
+		labelingLayout.addWidget(QLabel('Index:'), 0, 0, alignment=Qt.AlignRight)
+		labelingLayout.addWidget(self.indexEdit, 0, 1)
+		labelingLayout.addWidget(self.addButton, 0, 2)
+		labelingLayout.addWidget(self.saveButton, 1, 0, 1, 3)
+		labelingGBox.setLayout(labelingLayout)
+
+		controlLayout = QHBoxLayout()
+		controlLayout.addWidget(self.playButton, 1)
+		controlLayout.addWidget(self.stopButton, 1)
+		controlLayout.addWidget(self.positionSlider, 15)
+		controlLayout.addWidget(searchGBox, 1)
+
+		mainLayout = QVBoxLayout()
+		mainLayout.addLayout(sourceLayout, 1)
+		mainLayout.addStretch(1)
+		mainLayout.addWidget(self.channelPanel, 1)
+		mainLayout.addStretch(1)
+		mainLayout.addLayout(paramsLayout, 1)
+		mainLayout.addStretch(1)
+		mainLayout.addWidget(labelingGBox, 1, alignment=Qt.AlignCenter)
+		mainLayout.addStretch(1)
+		mainLayout.addLayout(controlLayout, 1)
+		# Main widget
+		mainWidget = QWidget()
+		mainWidget.setLayout(mainLayout)
+		self.setCentralWidget(mainWidget)
+		# Status bar
+		self.statusBar = QStatusBar()
+		self.statusBar.showMessage('¡System ready!')
+		self.setStatusBar(self.statusBar)
+
+	def loadVideo(self):
+		path = self.videoDialog.getFullPath()
+		self.player.loadMedia(path)
+		# self.startButton.setEnabled(True)
+
+	def mediaError(self):
+		self.statusBar.showMessage('Error: {}'.format(self.player.errorString()))
 
 
 class BCIVisualizer(QMainWindow):
@@ -554,9 +769,8 @@ class BCIVisualizer(QMainWindow):
 		self.setWindowTitle('BCI Visualizer')
 		self.resize(1280, 720)
 		self.setContentsMargins(10, 10, 10, 10)
-		
-		
+
 app = QApplication(sys.argv)
-view = EEGRecorder()
+view = EEGLabeling()
 view.show()
 sys.exit(app.exec())
