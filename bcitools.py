@@ -1131,16 +1131,16 @@ class BCIVisualizer(QMainWindow):
 		self.loadButton.clicked.connect(self.loadFiles)
 		self.leftPrevButton = QPushButton()
 		self.leftPrevButton.setIcon(self.icon.standardIcon(QStyle.SP_ArrowLeft))
-		self.leftPrevButton.clicked.connect(lambda: self.prevPlot('left'))
+		self.leftPrevButton.clicked.connect(lambda: self.updatePlot('left', -1))
 		self.leftNextButton = QPushButton()
 		self.leftNextButton.setIcon(self.icon.standardIcon(QStyle.SP_ArrowRight))
-		self.leftNextButton.clicked.connect(lambda: self.nextPlot('left'))
+		self.leftNextButton.clicked.connect(lambda: self.updatePlot('left', 1))
 		self.rightPrevButton = QPushButton()
 		self.rightPrevButton.setIcon(self.icon.standardIcon(QStyle.SP_ArrowLeft))
-		self.rightPrevButton.clicked.connect(lambda: self.prevPlot('right'))
+		self.rightPrevButton.clicked.connect(lambda: self.updatePlot('right', -1))
 		self.rightNextButton = QPushButton()
 		self.rightNextButton.setIcon(self.icon.standardIcon(QStyle.SP_ArrowRight))
-		self.rightNextButton.clicked.connect(lambda: self.nextPlot('right'))
+		self.rightNextButton.clicked.connect(lambda: self.updatePlot('right', 1))
 		self.applyButton = QPushButton('Apply')
 		self.applyButton.setIcon(self.icon.standardIcon(QStyle.SP_DialogApplyButton))
 		self.applyButton.setEnabled(False)
@@ -1325,7 +1325,7 @@ class BCIVisualizer(QMainWindow):
 		# Set plot counter
 		self.plotTotal['left'] = len(self.X_train)
 		# Plot first training window
-		self.nextPlot('left')
+		self.updatePlot('left', 1)
 
 	def runExperiment(self):
 		neuralnet = MLP_NN()
@@ -1354,29 +1354,15 @@ class BCIVisualizer(QMainWindow):
 		# Set plot counter
 		self.plotTotal['right'] = len(self.X_test)
 		# Plot first testing window
-		self.nextPlot('right')
+		self.updatePlot('right', 1)
 
-	def nextPlot(self, side):
-		if (self.plotIndex[side] + 1) < self.plotTotal[side]:
-			self.plotIndex[side] += 1
-		else:
-			return
-		data = self.T_tmp[self.plotIndex[side]] if side == 'left' else self.V_tmp[self.plotIndex[side]]
-		self.plotViewer[side].plotData(data)
-		self.plotViewer[side].update()
-		self.indexLabel[side].setText('{} / {}'.format(self.plotIndex[side] + 1, self.plotTotal[side]))
-		self.updateLabel(side)
-
-	def prevPlot(self, side):
-		if (self.plotIndex[side] - 1) >= 0:
-			self.plotIndex[side] -= 1
-		else:
-			return
-		data = self.T_tmp[self.plotIndex[side]] if side == 'left' else self.V_tmp[self.plotIndex[side]]
-		self.plotViewer[side].plotData(data)
-		self.plotViewer[side].update()
-		self.indexLabel[side].setText('{} / {}'.format(self.plotIndex[side] + 1, self.plotTotal[side]))
-		self.updateLabel(side)
+	def updatePlot(self, side, val):
+		if (self.plotIndex[side] + val) >= 0 and (self.plotIndex[side] + val) < self.plotTotal[side]:
+			self.plotIndex[side] += val
+			data = self.T_tmp[self.plotIndex[side]] if side == 'left' else self.V_tmp[self.plotIndex[side]]
+			self.plotViewer[side].plotData(data)
+			self.plotViewer[side].update()
+			self.updateLabel(side)
 
 	def updateLabel(self, side):
 		color = {0: 'red', 1: 'green'}
@@ -1389,17 +1375,19 @@ class BCIVisualizer(QMainWindow):
 			pixPred = self.pixmap[color[self.y_pred[self.plotIndex[side]]]]['pred']
 			self.rightRealLabel.setPixmap(pixReal)
 			self.rightPredLabel.setPixmap(pixPred)
+		# Upadate index label
+		self.indexLabel[side].setText('{} / {}'.format(self.plotIndex[side] + 1, self.plotTotal[side]))
 
 	def updateStats(self, scoreE=None, scoreV=None, scoreP=None):
 		summary = ''
 		if scoreE is not None:
 			summary += 'EVALUATION\n'
-			summary += '-> Loss: {}\n-> Accuracy: {}\n'.format(scoreE[0], scoreE[1])
+			summary += '-> Loss: {}\n-> Accuracy: {}\n'.format(round(scoreE[0], 5), round(scoreE[1], 5))
 		if scoreV is not None:
 			summary += 'VALIDATION\n'
 			summary += '-> TP: {}\n-> FP: {}\n'.format(scoreV['tp'], scoreV['fp'])
 			summary += '-> TN: {}\n-> FN: {}\n'.format(scoreV['tn'], scoreV['fn'])
-			summary += '-> Accuracy: {}'.format(scoreV['acc'])
+			summary += '-> Accuracy: {}'.format(round(scoreV['acc'], 5))
 		if scoreP is not None:
 			positives = scoreP.sum()
 			negatives = scoreP.size - positives
@@ -1418,7 +1406,6 @@ class BCIVisualizer(QMainWindow):
 		self.leftRealLabel.setPixmap(self.pixmap['gray']['real'])
 		self.rightRealLabel.setPixmap(self.pixmap['gray']['real'])
 		self.rightPredLabel.setPixmap(self.pixmap['gray']['pred'])
-
 
 
 app = QApplication(sys.argv)
