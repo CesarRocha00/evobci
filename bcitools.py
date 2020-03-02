@@ -28,53 +28,50 @@ __version__ = '0.1'
 __author__ = 'César Rocha'
 
 # Function to split EEG (Pandas DataFrame) in secuential windows
-def make_windows(D, wsize, labelID=None, step=None):
+def make_windows(D, wsize, labelID=None, wover=0):
 	samples = D.index.size
 	limit = samples - wsize
-	X = list()
-	y = list()
-	if step is not None:
-		X = [D.iloc[i:i + wsize] for i in range(0, limit, step)]
-	else: 
-		X = [D.iloc[i:i + wsize] for i in range(0, limit, wsize)]
+	X, y = list(), list()
+	step = wsize - wover
+	D.reset_index(drop=True, inplace=True)
+	X = [D.iloc[i:i + wsize] for i in range(0, limit, step)]
 	if labelID is not None:
 		y = [1 if 1 in win[labelID].values else 0 for win in X]
 	return X, y
 
-# Function to split EEG (Pandas DataFrame) in fixed windows based on label
-def make_fixed_windows(D, wsize, labelID, step=None, samples=1):
+def make_fixed_windows(D, wsize, labelID, wover=0, samples=1):
 	half = wsize // 2
 	remainder = wsize % 2
+	padding = (samples // 2) * wover
+	include_ref = samples % 2 == 1
+	targets = D[D[labelID] == 1].index
 	X, y = list(), list()
-	i = 0
-	while True:
-		index = D[D[labelID] == 1].index
-		if index.size == 0:
-			break
-		center = index[0]
-		i += 1
-		padding = ceil(half / samples)
-		mark = center - half + padding
-		centroid = wsize // samples
-		points = list()
-		# Creater the 'centers'
-		for i in range(samples):
-			points.append(mark)
-			mark += centroid
-		# Slice the window samples
-		for mark in points:
-			left = mark - half
-			right = mark + half + remainder - 1
+	print('Samples:', samples)
+	print('W. size:', wsize)
+	for ref in targets:
+		print('Ref:', ref)
+		# Compute limits
+		start = ref - padding
+		stop = ref + padding + 1
+		print('Start:', start)
+		print('Stop:', stop)
+		# Window extraction
+		for i in range(start, stop, wover):
+			if i == ref and not include_ref:
+				continue
+			left = i - half
+			right = i + half + remainder
+			print('[{}:{}]'.format(left, right))
 			X.append(D.loc[left:right])
 			y.append(1)
-		# Remove central window event
-		left = center - half
-		right = center + half + remainder
+		# Remove central window
+		left = ref - half
+		right = ref + half + remainder
+		print('<{}:{}>'.format(left,right))
 		D.drop(range(left, right), inplace=True)
-		D.reset_index(drop=True, inplace=True)
-	_X, _y = make_windows(D, wsize, labelID, step)
-	X.extend(list(_X))
-	y.extend(list(_y))
+	_X, _y = make_windows(D, wsize, labelID, wover)
+	X.extend(_X)
+	y.extend(_y)
 	return X, y
 
 # Compute de maximum allowed size for a EEG DataFrame segmentation
@@ -113,46 +110,6 @@ def bandpass(D, fs, low, high, order, numCols):
 	b, a = butter(order, [lowCut, highCut], 'bandpass', output='ba')
 	X = filtfilt(b, a, X)
 	D[columns] = X.T
-
-
-class MLP_NN(kr.models.Sequential):
-	"""docstring for MLP_NN"""
-	def __init__(self):
-		super(MLP_NN, self).__init__()
-		# Reset previous states
-		kr.backend.clear_session()
-
-	def build(self, input_dim, layer, activation, optimizer, loss, metrics):
-		self.add(kr.layers.Dense(layer[0], activation=activation[0], input_dim=input_dim))
-		for i in range(1, len(layer)):
-			self.add(kr.layers.Dense(layer[i], activation=activation[i]))
-		self.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-
-	def training(self, X, y, _X=None, _y=None, val_size=None, epochs=10, verbose=0):
-		history = self.fit(X, y, epochs=epochs, validation_split=val_size, shuffle=True, verbose=verbose)
-		return history
-
-	def evaluation(self, X, y, verbose=0):
-		score = self.evaluate(X, y, verbose=verbose)
-		return score
-
-	def validation(self, X, y):
-		total = y.size
-		positives = y.sum()
-		negatives = total - positives
-		z = self.predict_classes(X).ravel()
-		TP = sum((y + z) == 2)
-		FP = sum(z == 1) - TP
-		TN = sum((y + z) == 0)
-		FN = sum(z == 0) - TN
-		accuracy = 0.0
-		if positives != 0 and negatives != 0:
-			accuracy = 0.5 * (TP / positives) + 0.5 * (TN / negatives)
-		return {'pred': z, 'tp': TP, 'fp': FP, 'tn': TN, 'fn': FN, 'acc': accuracy}
-
-	def prediction(self, X):
-		z = self.predict_classes(X).ravel()
-		return z
 
 
 class FilePathDialog(QWidget):
@@ -469,7 +426,7 @@ class EEGViewer(QThread):
 
 	def plotData(self, D):
 		for ch in self.channel:
-			self.plotTrace[ch].setData(D[ch].values)
+			self.plotTrace[ch].setData(x=D.index, y=D[ch].values)
 		self.position = 0
 		self.maxPosition = D.index.size
 
@@ -1075,6 +1032,7 @@ class BCIVisualizer(QMainWindow):
 		# Variables
 		self.T = None
 		self.V = None
+		self.X = None
 		self.T_tmp = None
 		self.V_tmp = None
 		self.X_train = None
@@ -1082,6 +1040,7 @@ class BCIVisualizer(QMainWindow):
 		self.y_train = None
 		self.y_test = None
 		self.y_pred = None
+		self.param = dict()
 		self.plotIndex = dict({'left': -1, 'right': -1})
 		self.plotTotal = dict({'left': 0, 'right': 0})
 		self.plotViewer = dict()
@@ -1248,71 +1207,75 @@ class BCIVisualizer(QMainWindow):
 		self.channelPanel.setOptions(columns)
 
 	def applyParameters(self):
-		channel = self.channelPanel.getChecked()
-		if len(channel) == 0:
+		channels = self.channelPanel.getChecked()
+		if len(channels) == 0:
 			self.statusBar.showMessage('You must select at least one channel!')
 			return
 		filters = self.filteringForm.getValues()
+		self.param['channel'] = channels[0]
+		self.param['wsize'] = int(self.wsizeEdit.text().strip())
+		self.param['wperc'] = float(self.wpercEdit.text().strip())
+		self.param['wover'] = int(round(self.param['wsize'] * self.param['wperc']))
+		self.param['label'] = self.labelID
 		# Data backup and preprocesing
-		self.T_tmp = None
-		self.V_tmp = None
 		# Training
 		if self.T is not None:
-			self.T_tmp = self.T.copy()
-			notch(self.T_tmp, filters['fs'], filters['notch'], filters['channels'])
-			bandpass(self.T_tmp, filters['fs'], filters['low'], filters['high'], filters['order'], filters['channels'])
-			channel.append(self.labelID)
-			self.T_tmp = self.T_tmp[channel]
-			channel.pop()
-			self.T_tmp[channel] = MinMaxScaler().fit_transform(self.T_tmp[channel])
+			self.T_tmp = self.applyFilters(self.T, filters, channels)
 		else:
 			self.statusBar.showMessage('Training EEG file was not loaded correctly! Try again.')
 			return
 		# Validation
 		if self.V is not None:
-			self.V_tmp = self.V.copy()
-			notch(self.V_tmp, filters['fs'], filters['notch'], filters['channels'])
-			bandpass(self.V_tmp, filters['fs'], filters['low'], filters['high'], filters['order'], filters['channels'])
-			channel.append(self.labelID)
-			self.V_tmp = self.T_tmp[channel]
-			channel.pop()
-			self.V_tmp[channel] = MinMaxScaler().fit_transform(self.V_tmp[channel])
+			self.V_tmp = self.applyFilters(self.V, filters, channels)
 		# Reset labels and counters
 		self.resetStates()
 		# Now try to create the traininig and testing datasets
-		self.createDatasets(channel)
+		self.createDatasets(channels)
 		self.runButton.setEnabled(True)
 
-	def createDatasets(self, channel):
-		wsize = int(self.wsizeEdit.text().strip())
-		maxWsize = maxWindowSize(self.T_tmp, self.labelID)
-		wperc = float(self.wpercEdit.text().strip())
+	def applyFilters(self, D, filters, channels):
+		C = D.copy()
+		notch(C, filters['fs'], filters['notch'], filters['channels'])
+		bandpass(C, filters['fs'], filters['low'], filters['high'], filters['order'], filters['channels'])
+		C[channels] = MinMaxScaler().fit_transform(C[channels])
+		# Remove non selected channels
+		if self.labelID in C.columns:	
+			channels.append(self.labelID)
+			C = C[channels]
+			channels.pop()
+		else:
+			C = C[channels]
+		return C
+
+	def createDatasets(self, channels):
 		fixed = self.fixedCheck.isChecked()
-		wover = round(wsize * wperc)
-		step = wsize - wover
+		colors = self.channelPanel.getColors()
 		valType = self.validationPanel.getChecked()
-		channel = self.channelPanel.getChecked()
-		color = self.channelPanel.getColors()
 		# Verify if fixed windows will be used
 		if fixed:
-			if wsize > maxWsize: wsize = maxWsize
-			self.T_tmp, self.y_train = make_fixed_windows(self.T_tmp, wsize, self.labelID, step)
+			maxWsize = maxWindowSize(self.T_tmp, self.labelID)
+			if self.param['wsize'] > maxWsize:
+				self.param['wsize'] = maxWsize
+				self.param['wover'] = int(round(self.param['wsize'] * self.param['wperc']))
+			self.T_tmp, self.y_train = make_fixed_windows(self.T_tmp, self.param['wsize'], self.labelID, self.param['wover'], samples=3)
 		else:
-			self.T_tmp, self.y_train = make_windows(self.T_tmp, wsize, self.labelID, step)
+			self.T_tmp, self.y_train = make_windows(self.T_tmp, self.param['wsize'], self.labelID, self.param['wover'])
 		# Check validation type to create training and testing dataset 
 		self.validation = 'Training'
 		if valType == 'Validation' and self.V is not None and self.labelID in self.V.columns:
-			self.V_tmp, self.y_test = make_windows(self.V_tmp, wsize, self.labelID, step)
+			# Copy for custom validation
+			self.X = self.V_tmp.copy()
+			self.V_tmp, self.y_test = make_windows(self.V_tmp, self.param['wsize'], self.labelID, self.param['wover'])
 			self.validation = valType
 		elif valType == 'Prediction' and self.V is not None:
-			self.V_tmp, self.y_test = make_windows(self.V_tmp, wsize, None, step)
+			self.V_tmp, self.y_test = make_windows(self.V_tmp, self.param['wsize'], None, self.param['wover'])
 			self.validation = valType
 		else:
 			self.T_tmp, self.V_tmp, self.y_train, self.y_test = train_test_split(self.T_tmp, self.y_train, test_size=0.3)
 		# Map lists of windows to numpy arrays
-		self.X_train = np.array([win[channel[0]].values for win in self.T_tmp])
+		self.X_train = np.array([win[channels[0]].values for win in self.T_tmp])
 		self.y_train = np.array(self.y_train)
-		self.X_test = np.array([win[channel[0]].values for win in self.V_tmp])
+		self.X_test = np.array([win[channels[0]].values for win in self.V_tmp])
 		self.y_test = np.array(self.y_test)
 		# Message of dataset creation
 		if self.validation != valType:
@@ -1320,8 +1283,8 @@ class BCIVisualizer(QMainWindow):
 		else:
 			self.statusBar.showMessage('Datasets are ready!')
 		# EEG viewer setup
-		self.plotViewer['left'].configure(channel, color, wsize)
-		self.plotViewer['right'].configure(channel, color, wsize)
+		self.plotViewer['left'].configure(channels, colors, self.param['wsize'])
+		self.plotViewer['right'].configure(channels, colors, self.param['wsize'])
 		# Set plot counter
 		self.plotTotal['left'] = len(self.X_train)
 		# Plot first training window
@@ -1329,7 +1292,7 @@ class BCIVisualizer(QMainWindow):
 
 	def runExperiment(self):
 		neuralnet = MLP_NN()
-		input_dim = self.X_train[0].size
+		input_dim = self.param['wsize']
 		layer = [input_dim * 2, input_dim, 1]
 		activation = ['relu', 'relu', 'sigmoid']
 		optimizer = 'adam'
@@ -1339,18 +1302,19 @@ class BCIVisualizer(QMainWindow):
 		neuralnet.build(input_dim, layer, activation, optimizer, loss, metrics)
 		self.statusBar.showMessage('Running training phase...')
 		neuralnet.training(self.X_train, self.y_train, val_size=0.3, epochs=200)
-		scoreP = None
-		scoreE = None
-		scoreV = None
+		# Get results
 		if self.validation == 'Prediction':
-			scoreP = neuralnet.prediction(self.X_test)
-			self.y_pred = scoreP
+			score = neuralnet.prediction(self.X_test)
+			self.y_pred = score
+			self.updateStats(score, 'prediction')
 		else:
-			scoreE = neuralnet.evaluation(self.X_test, self.y_test)
-			scoreV = neuralnet.validation(self.X_test, self.y_test)
-			self.y_pred = scoreV['pred']
+			score = neuralnet.evaluation(self.X_test, self.y_test)
+			self.updateStats(score, 'evaluation')
+			score = neuralnet.validation(self.X_test, self.y_test)
+			self.y_pred = score['pred']
+			self.updateStats(score, 'validation')
+			score = neuralnet.custom_validation(self.X, self.param)
 		self.statusBar.showMessage('Neural network has finished!')
-		self.updateStats(scoreE=scoreE, scoreV=scoreV, scoreP=scoreP)
 		# Set plot counter
 		self.plotTotal['right'] = len(self.X_test)
 		# Plot first testing window
@@ -1360,8 +1324,12 @@ class BCIVisualizer(QMainWindow):
 		if (self.plotIndex[side] + val) >= 0 and (self.plotIndex[side] + val) < self.plotTotal[side]:
 			self.plotIndex[side] += val
 			data = self.T_tmp[self.plotIndex[side]] if side == 'left' else self.V_tmp[self.plotIndex[side]]
+			start = data.index[0]
+			print(data.index.size)
+			center = start + self.param['wsize'] / 2
 			self.plotViewer[side].plotData(data)
-			self.plotViewer[side].update()
+			self.plotViewer[side].setPosition(center)
+			# self.plotViewer[side].update()
 			self.updateLabel(side)
 
 	def updateLabel(self, side):
@@ -1378,22 +1346,23 @@ class BCIVisualizer(QMainWindow):
 		# Upadate index label
 		self.indexLabel[side].setText('{} / {}'.format(self.plotIndex[side] + 1, self.plotTotal[side]))
 
-	def updateStats(self, scoreE=None, scoreV=None, scoreP=None):
-		summary = ''
-		if scoreE is not None:
-			summary += 'EVALUATION\n'
-			summary += '-> Loss: {}\n-> Accuracy: {}\n'.format(round(scoreE[0], 5), round(scoreE[1], 5))
-		if scoreV is not None:
-			summary += 'VALIDATION\n'
-			summary += '-> TP: {}\n-> FP: {}\n'.format(scoreV['tp'], scoreV['fp'])
-			summary += '-> TN: {}\n-> FN: {}\n'.format(scoreV['tn'], scoreV['fn'])
-			summary += '-> Accuracy: {}'.format(round(scoreV['acc'], 5))
-		if scoreP is not None:
-			positives = scoreP.sum()
-			negatives = scoreP.size - positives
-			summary += 'PREDICTION\n'
+	def updateStats(self, score, desc):
+		if desc == 'evaluation':
+			summary = 'EVALUATION\n'
+			summary += '-> Loss: {}\n-> Accuracy: {}\n'.format(round(score[0], 5), round(score[1], 5))
+			self.statsEdit.insertPlainText(summary)
+		elif desc == 'validation':
+			summary = 'VALIDATION\n'
+			summary += '-> TP: {}\n-> FP: {}\n'.format(score['tp'], score['fp'])
+			summary += '-> TN: {}\n-> FN: {}\n'.format(score['tn'], score['fn'])
+			summary += '-> Accuracy: {}\n'.format(round(score['acc'], 5))
+			self.statsEdit.insertPlainText(summary)
+		else:
+			positives = score.sum()
+			negatives = score.size - positives
+			summary = 'PREDICTION\n'
 			summary += '-> Positives: {}\n-> Negatives: {}\n'.format(positives, negatives)
-		self.statsEdit.setPlainText(summary)
+			self.statsEdit.insertPlainText(summary)
 
 	def resetStates(self):
 		self.plotIndex['left'] = -1
@@ -1408,7 +1377,66 @@ class BCIVisualizer(QMainWindow):
 		self.rightPredLabel.setPixmap(self.pixmap['gray']['pred'])
 
 
-app = QApplication(sys.argv)
-view = BCIVisualizer()
-view.show()
-sys.exit(app.exec_())
+class MLP_NN(kr.models.Sequential):
+	"""docstring for MLP_NN"""
+	def __init__(self):
+		super(MLP_NN, self).__init__()
+		# Reset previous states
+		kr.backend.clear_session()
+
+	def build(self, input_dim, layer, activation, optimizer, loss, metrics):
+		self.add(kr.layers.Dense(layer[0], activation=activation[0], input_dim=input_dim))
+		for i in range(1, len(layer)):
+			self.add(kr.layers.Dense(layer[i], activation=activation[i]))
+		self.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+
+	def training(self, X, y, _X=None, _y=None, val_size=None, epochs=10, verbose=0):
+		history = self.fit(X, y, epochs=epochs, validation_split=val_size, shuffle=True, verbose=verbose)
+		return history
+
+	def evaluation(self, X, y, verbose=0):
+		score = self.evaluate(X, y, verbose=verbose)
+		return score
+
+	def validation(self, X, y):
+		total = y.size
+		positives = y.sum()
+		negatives = total - positives
+		z = self.predict_classes(X).ravel()
+		TP = sum((y + z) == 2)
+		FP = sum(z == 1) - TP
+		TN = sum((y + z) == 0)
+		FN = sum(z == 0) - TN
+		accuracy = 0.0
+		if positives != 0 and negatives != 0:
+			accuracy = 0.5 * (TP / positives) + 0.5 * (TN / negatives)
+		return {'pred': z, 'tp': TP, 'fp': FP, 'tn': TN, 'fn': FN, 'acc': accuracy}
+
+	def custom_validation(self, D, param):
+		X_test = list()
+		y_test = list()
+		y_pred = list()
+		step = param['wsize'] - param['wover']
+		i, j = 0, param['wsize']
+		while j < D.index.size:
+			win = D.iloc[i:j]
+			lbl = 1 if 1 in win[param['label']] else 0
+			pred = self.prediction(np.array([win[param['channel']].values]))[0]
+			X_test.append(win)
+			y_test.append(lbl)
+			y_pred.append(pred)
+			# Next window index
+			i += param['wsize'] if lbl == 1 and pred == 1 else step
+			j += param['wsize'] if lbl == 1 and pred == 1 else step
+		# Fix false negatives in lists
+		y_test = np.array(y_test)
+		index = (y_test == 1).nonzero()[0]
+		print(index)
+		y_pred = np.array(y_pred)
+		# Confusion matrix
+		score = {'X_test': X_test, 'y_test': y_test, 'y_pred': y_pred, 'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0, 'acc': 0.0}
+		return score
+
+	def prediction(self, X):
+		z = self.predict_classes(X).ravel()
+		return z
