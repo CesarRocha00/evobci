@@ -1,16 +1,20 @@
-import os
-import sys
 import cv2
 import numpy as np
 import pandas as pd
 from math import ceil
-import tensorflow.keras as kr
 from datetime import datetime
+# EEG Tools
+from eegtools import *
+# Artificial Neural Network
+from neuralnet import MLP_NN
+# Lab Streaming Layer
 from pylsl import StreamInlet, resolve_stream
+# Scikit-Learn
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
+# PyQtGraph
 from pyqtgraph import mkPen, GraphicsLayoutWidget
-from scipy.signal import iirnotch, filtfilt, butter
+# PyQt5
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
@@ -21,96 +25,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QStatusBar, QVBo
 							 QSizePolicy, QSlider, QStyle, QFileDialog, QRadioButton,
 							 QFormLayout, QGridLayout, QDesktopWidget, QCheckBox, QPlainTextEdit)
 
-# Prevent log messages from tensorflow
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
 __version__ = '0.1'
 __author__ = 'César Rocha'
-
-# Function to split EEG (Pandas DataFrame) in secuential windows
-def make_windows(D, wsize, labelID=None, wover=0):
-	samples = D.index.size
-	limit = samples - wsize
-	X, y = list(), list()
-	step = wsize - wover
-	D.reset_index(drop=True, inplace=True)
-	X = [D.iloc[i:i + wsize] for i in range(0, limit, step)]
-	if labelID is not None:
-		y = [1 if 1 in win[labelID].values else 0 for win in X]
-	return X, y
-
-def make_fixed_windows(D, wsize, labelID, wover=0, samples=1):
-	half = wsize // 2
-	remainder = wsize % 2
-	padding = (samples // 2) * wover
-	include_ref = samples % 2 == 1
-	targets = D[D[labelID] == 1].index
-	X, y = list(), list()
-	print('Samples:', samples)
-	print('W. size:', wsize)
-	for ref in targets:
-		print('Ref:', ref)
-		# Compute limits
-		start = ref - padding
-		stop = ref + padding + 1
-		print('Start:', start)
-		print('Stop:', stop)
-		# Window extraction
-		for i in range(start, stop, wover):
-			if i == ref and not include_ref:
-				continue
-			left = i - half
-			right = i + half + remainder
-			print('[{}:{}]'.format(left, right))
-			X.append(D.loc[left:right])
-			y.append(1)
-		# Remove central window
-		left = ref - half
-		right = ref + half + remainder
-		print('<{}:{}>'.format(left,right))
-		D.drop(range(left, right), inplace=True)
-	_X, _y = make_windows(D, wsize, labelID, wover)
-	X.extend(_X)
-	y.extend(_y)
-	return X, y
-
-# Compute de maximum allowed size for a EEG DataFrame segmentation
-def maxWindowSize(D, labelID):
-	label = D[labelID]
-	index = label[label == 1].index
-	# One minute in samples
-	maxSize = 60 * 250
-	for i in range(len(index) - 1):
-		dist = index[i + 1] - index[i]
-		if dist < maxSize: maxSize = dist
-	return maxSize
-
-# Refactor a dataset to have equal number of examples per class
-def balanceDataset(X, y):
-	pos = (y == 1).nonzero()[0]
-	neg = (y == 0).nonzero()[0]
-	tPos = pos.size
-	fill = np.random.choice(neg, tPos, replace=False)
-	index = np.concatenate((pos, fill), axis=0)
-	return (X[index], y[index])
-
-def notch(D, fs, w0, numCols, Q=30.0):
-	columns = D.columns[:numCols]
-	X = D[columns].values.T
-	b, a = iirnotch(w0, Q, fs)
-	X = filtfilt(b, a, X)
-	D[columns] = X.T
-
-def bandpass(D, fs, low, high, order, numCols):
-	columns = D.columns[:numCols]
-	X = D[columns].values.T
-	nyq = fs * 0.5
-	lowCut = low / nyq
-	highCut = high / nyq
-	b, a = butter(order, [lowCut, highCut], 'bandpass', output='ba')
-	X = filtfilt(b, a, X)
-	D[columns] = X.T
-
 
 class FilePathDialog(QWidget):
 	"""docstring for FilePathDialog"""
@@ -426,7 +342,7 @@ class EEGViewer(QThread):
 
 	def plotData(self, D):
 		for ch in self.channel:
-			self.plotTrace[ch].setData(x=D.index, y=D[ch].values)
+			self.plotTrace[ch].setData(D[ch].values)
 		self.position = 0
 		self.maxPosition = D.index.size
 
@@ -1253,7 +1169,7 @@ class BCIVisualizer(QMainWindow):
 		valType = self.validationPanel.getChecked()
 		# Verify if fixed windows will be used
 		if fixed:
-			maxWsize = maxWindowSize(self.T_tmp, self.labelID)
+			maxWsize = max_window_size(self.T_tmp, self.labelID)
 			if self.param['wsize'] > maxWsize:
 				self.param['wsize'] = maxWsize
 				self.param['wover'] = int(round(self.param['wsize'] * self.param['wperc']))
@@ -1325,11 +1241,8 @@ class BCIVisualizer(QMainWindow):
 			self.plotIndex[side] += val
 			data = self.T_tmp[self.plotIndex[side]] if side == 'left' else self.V_tmp[self.plotIndex[side]]
 			start = data.index[0]
-			print(data.index.size)
-			center = start + self.param['wsize'] / 2
 			self.plotViewer[side].plotData(data)
-			self.plotViewer[side].setPosition(center)
-			# self.plotViewer[side].update()
+			self.plotViewer[side].update()
 			self.updateLabel(side)
 
 	def updateLabel(self, side):
@@ -1375,68 +1288,3 @@ class BCIVisualizer(QMainWindow):
 		self.leftRealLabel.setPixmap(self.pixmap['gray']['real'])
 		self.rightRealLabel.setPixmap(self.pixmap['gray']['real'])
 		self.rightPredLabel.setPixmap(self.pixmap['gray']['pred'])
-
-
-class MLP_NN(kr.models.Sequential):
-	"""docstring for MLP_NN"""
-	def __init__(self):
-		super(MLP_NN, self).__init__()
-		# Reset previous states
-		kr.backend.clear_session()
-
-	def build(self, input_dim, layer, activation, optimizer, loss, metrics):
-		self.add(kr.layers.Dense(layer[0], activation=activation[0], input_dim=input_dim))
-		for i in range(1, len(layer)):
-			self.add(kr.layers.Dense(layer[i], activation=activation[i]))
-		self.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-
-	def training(self, X, y, _X=None, _y=None, val_size=None, epochs=10, verbose=0):
-		history = self.fit(X, y, epochs=epochs, validation_split=val_size, shuffle=True, verbose=verbose)
-		return history
-
-	def evaluation(self, X, y, verbose=0):
-		score = self.evaluate(X, y, verbose=verbose)
-		return score
-
-	def validation(self, X, y):
-		total = y.size
-		positives = y.sum()
-		negatives = total - positives
-		z = self.predict_classes(X).ravel()
-		TP = sum((y + z) == 2)
-		FP = sum(z == 1) - TP
-		TN = sum((y + z) == 0)
-		FN = sum(z == 0) - TN
-		accuracy = 0.0
-		if positives != 0 and negatives != 0:
-			accuracy = 0.5 * (TP / positives) + 0.5 * (TN / negatives)
-		return {'pred': z, 'tp': TP, 'fp': FP, 'tn': TN, 'fn': FN, 'acc': accuracy}
-
-	def custom_validation(self, D, param):
-		X_test = list()
-		y_test = list()
-		y_pred = list()
-		step = param['wsize'] - param['wover']
-		i, j = 0, param['wsize']
-		while j < D.index.size:
-			win = D.iloc[i:j]
-			lbl = 1 if 1 in win[param['label']] else 0
-			pred = self.prediction(np.array([win[param['channel']].values]))[0]
-			X_test.append(win)
-			y_test.append(lbl)
-			y_pred.append(pred)
-			# Next window index
-			i += param['wsize'] if lbl == 1 and pred == 1 else step
-			j += param['wsize'] if lbl == 1 and pred == 1 else step
-		# Fix false negatives in lists
-		y_test = np.array(y_test)
-		index = (y_test == 1).nonzero()[0]
-		print(index)
-		y_pred = np.array(y_pred)
-		# Confusion matrix
-		score = {'X_test': X_test, 'y_test': y_test, 'y_pred': y_pred, 'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0, 'acc': 0.0}
-		return score
-
-	def prediction(self, X):
-		z = self.predict_classes(X).ravel()
-		return z
