@@ -4,23 +4,16 @@ from scipy.signal import iirnotch, filtfilt, butter
 def make_windows(D, wsize, labelID=None, wover=0):
 	samples = D.index.size
 	limit = samples - wsize
-	X, y = list(), list()
 	step = wsize - wover
 	X = [D.iloc[i:i + wsize] for i in range(0, limit, step)]
-	if labelID is not None:
-		y = [1 if 1 in win[labelID].values else 0 for win in X]
+	y = [1 if 1 in win[labelID].values else 0 for win in X] if labelID is not None else []
 	return X, y
 
-def make_fixed_windows(D, wsize, labelID, wover=0, samples=1):
+def make_fixed_windows(D, wsize, labelID, wover=0, nwindows=1, step=1):
 	half = wsize // 2
-	# print('Half', half)
 	remainder = wsize % 2
-	# print('Remainder', remainder)
-	padding = (samples // 2) * wover
-	# print('Padding', padding)
-	include_ref = samples % 2 == 1
-	# print('Include ref', include_ref)
-	# print('Wover', wover)
+	padding = (nwindows // 2) * step
+	include_ref = nwindows % 2 == 1
 	X, y = list(), list()
 	while True:
 		targets = D[D[labelID] == 1].index
@@ -30,14 +23,12 @@ def make_fixed_windows(D, wsize, labelID, wover=0, samples=1):
 		# Compute limits
 		start = ref - padding
 		stop = ref + padding + 1
-		# print('Ref', ref, 'Start', start, 'Stop', stop)
 		# Window extraction
-		for i in range(start, stop, wover):
+		for i in range(start, stop, step):
 			if i == ref and not include_ref:
 				continue
 			left = i - half
 			right = i + half + remainder
-			# print('Dif', right - left)
 			X.append(D.iloc[left:right])
 			y.append(1)
 		# Remove central window

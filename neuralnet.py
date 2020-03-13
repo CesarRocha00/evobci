@@ -18,7 +18,7 @@ class MLP_NN(kr.models.Sequential):
 			self.add(kr.layers.Dense(layer[i], activation=activation[i]))
 		self.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-	def training(self, X, y, _X=None, _y=None, val_size=None, epochs=10, verbose=0):
+	def training(self, X, y, val_size=None, epochs=10, verbose=0):
 		history = self.fit(X, y, epochs=epochs, validation_split=val_size, shuffle=True, verbose=verbose)
 		return history
 
@@ -46,23 +46,42 @@ class MLP_NN(kr.models.Sequential):
 		y_pred = list()
 		step = param['wsize'] - param['wover']
 		i, j = 0, param['wsize']
+		possibleFN = False
+		TP = FP = TN = FN = 0
+		count = 1
 		while j < D.index.size:
 			win = D.iloc[i:j]
-			lbl = 1 if 1 in win[param['label']] else 0
+			real = 1 if 1 in win[param['label']].values else 0
+			# if real == 1:
+			# 	print(count, np.argmax(win[param['label']].values))
+			# count += 1
 			pred = self.prediction(np.array([win[param['channel']].values]))[0]
 			X_test.append(win)
-			y_test.append(lbl)
+			y_test.append(real)
 			y_pred.append(pred)
+			# Confusion matrix
+			if real == 1 and pred == 1:
+				TP += 1
+			elif real == 0 and pred == 1:
+				FP += 1
+			elif real == 0 and pred == 0:
+				TN += 1
+			elif real == 1 and pred == 0:
+				possibleFN = True
+			# Check possibles FN
+			if real == 0 and possibleFN:
+				FN += 1
+				possibleFN = False
 			# Next window index
-			i += param['wsize'] if lbl == 1 and pred == 1 else step
-			j += param['wsize'] if lbl == 1 and pred == 1 else step
-		# Fix false negatives in lists
-		y_test = np.array(y_test)
-		index = (y_test == 1).nonzero()[0]
-		y_pred = np.array(y_pred)
-		# Confusion matrix
-		score = {'X_test': X_test, 'y_test': y_test, 'y_pred': y_pred, 'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0, 'acc': 0.0}
-		return score
+			i += param['wsize'] if real == 1 and pred == 1 else step
+			j += param['wsize'] if real == 1 and pred == 1 else step
+		# Stats
+		positives = TP + FN
+		negatives = TN + FP
+		accuracy = 0.0
+		if positives != 0 and negatives != 0:
+			accuracy = 0.5 * (TP / positives) + 0.5 * (TN / negatives)
+		return {'X_test': X_test, 'y_test': y_test, 'y_pred': y_pred, 'tp': TP, 'fp': FP, 'tn': TN, 'fn': FN, 'acc': accuracy}
 
 	def prediction(self, X):
 		z = self.predict_classes(X).ravel()

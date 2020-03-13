@@ -1,4 +1,5 @@
 import cv2
+import h5py
 import numpy as np
 import pandas as pd
 from math import ceil
@@ -398,17 +399,19 @@ class OCVWebcam(QThread):
 		self.F = list()
 		self.source = None
 		self.state = self.StoppedState
+		self.filename = 'video.hdf5'
 
-	def setSource(self, src):
+	def setSource(self, src, width=640, height=480):
 		self.source = cv2.VideoCapture(src)
-		self.source.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-		self.source.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+		self.source.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+		self.source.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 		self.F.clear()
 
 	def getFrames(self):
 		return self.F
 
-	def record(self):
+	def record(self, filename='video.hdf5'):
+		self.filename = filename
 		self.state = self.RecordingState
 
 	def pause(self):
@@ -424,7 +427,7 @@ class OCVWebcam(QThread):
 	def run(self):
 		while True:
 			if self.state == self.RecordingState:
-				_, frame = self.source.read()
+				ret, frame = self.source.read()
 				self.F.append(frame)
 			elif self.state == self.PausedState:
 				pass
@@ -1173,7 +1176,7 @@ class BCIVisualizer(QMainWindow):
 			if self.param['wsize'] > maxWsize:
 				self.param['wsize'] = maxWsize
 				self.param['wover'] = int(round(self.param['wsize'] * self.param['wperc']))
-			self.T_tmp, self.y_train = make_fixed_windows(self.T_tmp, self.param['wsize'], self.labelID, self.param['wover'], samples=3)
+			self.T_tmp, self.y_train = make_fixed_windows(self.T_tmp, self.param['wsize'], self.labelID, self.param['wover'])
 		else:
 			self.T_tmp, self.y_train = make_windows(self.T_tmp, self.param['wsize'], self.labelID, self.param['wover'])
 		# Check validation type to create training and testing dataset 
@@ -1224,12 +1227,15 @@ class BCIVisualizer(QMainWindow):
 			self.y_pred = score
 			self.updateStats(score, 'prediction')
 		else:
-			score = neuralnet.evaluation(self.X_test, self.y_test)
-			self.updateStats(score, 'evaluation')
-			score = neuralnet.validation(self.X_test, self.y_test)
-			self.y_pred = score['pred']
-			self.updateStats(score, 'validation')
+			# score = neuralnet.evaluation(self.X_test, self.y_test)
+			# self.updateStats(score, 'evaluation')
+			# score = neuralnet.validation(self.X_test, self.y_test)
+			# self.y_pred = score['pred']
+			# self.updateStats(score, 'validation')
+			self.param['wover'] = int(round(self.param['wsize'] * 0.75))
 			score = neuralnet.custom_validation(self.X, self.param)
+			self.V_tmp, self.y_test, self.y_pred = score['X_test'], score['y_test'], score['y_pred']
+			self.updateStats(score, 'validation')
 		self.statusBar.showMessage('Neural network has finished!')
 		# Set plot counter
 		self.plotTotal['right'] = len(self.X_test)

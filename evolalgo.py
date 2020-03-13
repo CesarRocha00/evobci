@@ -32,7 +32,7 @@ class Individual(object):
 	def __init__(self):
 		super(Individual, self).__init__()
 		self.genotype = list()
-		self.fenotype = None
+		self.phenotype = list()
 		self.fitness = None
 
 
@@ -45,28 +45,30 @@ class GeneticAlgorithm(object):
 		self.cxpb = cxpb
 		self.n_points = n_points
 		self.mutpb = mutpb
+		self.minmax = minmax
 		self.parents = list()
 		self.population = list()
 		self.variable_conf = dict()
 		self.variable_names = list()
+		self.variable_bits = list()
 		self.n_vars = 0
-		self.n_bits = list()
 		self.total_bits = 0
 		self.func = None
 		self.comp = op.lt if minmax == 'min' else op.gt
+		self.reverse = False if minmax == 'min' else True
 		if seed is not None and seed >= 0:
 			np.random.seed(seed)
 		self.seed = np.random.get_state()[1][0]
 
 	def set_variable_conf(self, conf):
 		for var in conf:
-			self.add_variable(var['name'], var['values'], var['precision'])
+			self.add_variable(var['name'], var['bounds'], var['precision'])
 
-	def add_variable(self, name, values=(0, 0), precision=0):
-		self.variable_conf[name] = {'values': values, 'precision': precision}
+	def add_variable(self, name, bounds=(0, 0), precision=0):
+		self.variable_conf[name] = {'bounds': bounds, 'precision': precision}
 		self.variable_names.append(name)
-		bits = bits_4_range(values[0], values[1], precision)
-		self.n_bits.append(bits)
+		bits = bits_4_range(bounds[0], bounds[1], precision)
+		self.variable_bits.append(bits)
 		self.total_bits += bits
 		self.n_vars += 1
 
@@ -83,7 +85,7 @@ class GeneticAlgorithm(object):
 
 	def initialize_ind(self):
 		ind = Individual()
-		for n in self.n_bits:
+		for n in self.variable_bits:
 			ind.genotype.append(np.random.randint(2, size=n))
 		return ind
 
@@ -92,21 +94,24 @@ class GeneticAlgorithm(object):
 			self.decode_ind(ind)
 
 	def decode_ind(self, ind):
-		ind.fenotype = np.zeros(self.n_vars)
+		ind.phenotype.clear()
 		for i in range(self.n_vars):
 			gray = ind.genotype[i]
 			binary = gray_2_binary(gray)
 			decimal = binary_2_decimal(binary)
-			min_val, max_val = self.variable_conf[self.variable_names[i]]['values']
-			bits = self.n_bits[i]
-			ind.fenotype[i] = fit_2_range(decimal, min_val, max_val, bits)
+			bits = self.variable_bits[i]
+			min_val, max_val = self.variable_conf[self.variable_names[i]]['bounds']
+			precision = self.variable_conf[self.variable_names[i]]['precision']
+			value = fit_2_range(decimal, min_val, max_val, bits)
+			value = round(value, precision) if precision > 0 else int(value)
+			ind.phenotype.append(value)
 
 	def evaluation_pop(self, pop):
 		for ind in pop:
 			self.evaluation_ind(ind)
 
 	def evaluation_ind(self, ind):
-		ind.fitness = self.func(ind.fenotype)
+		ind.fitness = self.func(ind.phenotype)
 
 	def tournament_selection(self):
 		idx1 = idx2 = -1
@@ -132,19 +137,30 @@ class GeneticAlgorithm(object):
 				self.population.append(deepcopy(self.population[idx2]))
 
 	def crossover_ind(self, ind1, ind2):
-		points = self.select_cx_points(self.n_points)
 		new1 = deepcopy(ind1)
 		new2 = deepcopy(ind2)
-		idx, swap = 0, False
 		for i in range(self.n_vars):
-			for j in range(self.n_bits[i]):
-				if points[idx]:
-					swap = not swap
+			for j in range(self.variable_bits[i]):
+				swap = np.random.rand() < 0.5
 				new1.genotype[i][j] = ind2.genotype[i][j] if swap else ind1.genotype[i][j]
 				new2.genotype[i][j] = ind1.genotype[i][j] if swap else ind2.genotype[i][j]
-				idx += 1
 		self.population.append(new1)
 		self.population.append(new2)
+
+	# def crossover_ind(self, ind1, ind2):
+	# 	points = self.select_cx_points(self.n_points)
+	# 	new1 = deepcopy(ind1)
+	# 	new2 = deepcopy(ind2)
+	# 	idx, swap = 0, False
+	# 	for i in range(self.n_vars):
+	# 		for j in range(self.variable_bits[i]):
+	# 			if points[idx]:
+	# 				swap = not swap
+	# 			new1.genotype[i][j] = ind2.genotype[i][j] if swap else ind1.genotype[i][j]
+	# 			new2.genotype[i][j] = ind1.genotype[i][j] if swap else ind2.genotype[i][j]
+	# 			idx += 1
+	# 	self.population.append(new1)
+	# 	self.population.append(new2)
 
 	def select_cx_points(self, n):
 		count = 0
@@ -162,21 +178,24 @@ class GeneticAlgorithm(object):
 
 	def mutation_ind(self, ind):
 		for i in range(self.n_vars):
-			for j in range(self.n_bits[i]):
+			for j in range(self.variable_bits[i]):
 				if np.random.rand() < self.mutpb:
 					ind.genotype[i][j] = 1 - ind.genotype[i][j]
 
-	def survivor_selection(self, reverse=False):
-		self.population.sort(key=lambda ind: ind.fitness, reverse=reverse)
+	def sort_population(self, pop):
+		pop.sort(key=lambda ind: ind.fitness, reverse=self.reverse)
+
+	def survivor_selection(self):
+		self.sort_population(self.population)
 		self.population = self.population[:self.pop_size]
 
 	def execute(self):
 		self.initialize_pop()
 		self.decode_pop(self.population)
 		self.evaluation_pop(self.population)
-		self.survivor_selection()
-		gbest = self.population[0].fitness
-		# self.print_ind(self.population[0])
+		self.sort_population(self.population)
+		gbest = self.population[0]
+		print('[{}]\tf(x) = {}\t{}'.format(0, gbest.fitness, gbest.phenotype))
 		for i in range(self.n_generations):
 			self.tournament_selection()
 			self.crossover_pop()
@@ -184,27 +203,34 @@ class GeneticAlgorithm(object):
 			self.decode_pop(self.population[self.pop_size:])
 			self.evaluation_pop(self.population[self.pop_size:])
 			self.survivor_selection()
-			fbest = self.population[0].fitness
-			# self.print_ind(self.population[0])
-			if self.comp(fbest, gbest):
-				gbest = fbest
+			fbest = self.population[0]
+			if self.comp(fbest.fitness, gbest.fitness):
+				gbest = deepcopy(fbest)
+			print('[{}]\tf(x) = {}\t{}'.format(i + 1, gbest.fitness, gbest.phenotype))
 		return (gbest, self.seed)
 
 	def print_ind(self, ind):
 		print(np.array(ind.genotype).ravel(), sep='')
 		for i in range(self.n_vars):
-			print('\tx{}: {}'.format(i + 1, ind.fenotype[i]), sep='')
+			print('\tx{}: {}'.format(i + 1, ind.phenotype[i]), sep='')
 		print('\tf(x): {}'.format(ind.fitness))
 
-
-def sphere(xval):
-	return sum([x**2 for x in xval])
-
-# alg = GeneticAlgorithm(100, 100, mutpb=-1)
-# alg.add_variable('x1', values=(-5.12, 5.12), precision=2)
-# alg.add_variable('x2', values=(-5.12, 5.12), precision=2)
-# alg.add_variable('x3', values=(-5.12, 5.12), precision=2)
-# alg.add_variable('x4', values=(-5.12, 5.12), precision=2)
-# alg.add_variable('x5', values=(-5.12, 5.12), precision=2)
-# alg.set_fitness_func(sphere)
-# print(alg.execute())
+class DifferentialEvolution(object):
+	"""docstring for DifferentialEvolution"""
+	def __init__(self, pop_size=4, n_generations=1, cxpb=0.9, minmax='min', seed=None):
+		super(DifferentialEvolution, self).__init__()
+		self.pop_size = pop_size
+		self.n_generations = n_generations
+		self.cxpb = cxpb
+		self.minmax = minmax
+		self.population = list()
+		self.variable_conf = dict()
+		self.variable_names = list()
+		self.n_vars = 0
+		self.func = None
+		self.comp = op.lt if minmax == 'min' else op.gt
+		self.reverse = False if minmax == 'min' else True
+		if seed is not None and seed >= 0:
+			np.random.seed(seed)
+		self.seed = np.random.get_state()[1][0]
+		
