@@ -4,6 +4,7 @@ import time
 import platform
 import numpy as np
 from datetime import datetime
+from bcitools import OCVWebcam
 
 # Best FPS: [key, data]
 # Best compression: [key, data, maxshape=(frame.shape[0], frame.shape[1], frame.shape[2]), compression='gzip', chunks=True]
@@ -27,7 +28,7 @@ def video_2_hdf5(filename, frame_limit):
 		if cv2.waitKey(1) & 0xFF == ord('q') or total_frames == frame_limit:
 			break
 		ret, frame = cap.read()
-		file.create_dataset('{}'.format(total_frames), data=frame, shape=frame.shape)
+		file.create_dataset('{}'.format(total_frames), data=frame)
 		total_frames += 1
 	# Stop timer
 	elapsed = datetime.now() - elapsed
@@ -62,6 +63,7 @@ def hdf5_2_video(filename):
 	width = file.attrs['width']
 	height = file.attrs['height']
 	length = file.attrs['length']
+	duration = file.attrs['duration']
 	# Open video writer
 	output = cv2.VideoWriter(outputfile, fourcc, fps, (width, height))
 	# Write frames
@@ -74,7 +76,17 @@ def hdf5_2_video(filename):
 	output.release()
 	# Close HDF5 file
 	file.close()
+	# Print information
+	print('Filename: {}\nFPS: {}\nFrames: {}\nSeconds: {}'.format(filename, fps, length, duration))
 
-filename = '../../../../Desktop/video.hdf5'
-video_2_hdf5(filename, 500)
+# filename = '../../../../Desktop/video.hdf5'
+# video_2_hdf5(filename, 500)
+# hdf5_2_video(filename)
+
+filename = 'vid.hdf5'
+cam = OCVWebcam()
+cam.setSource(0)
+cam.record(filename)
+time.sleep(10)
+cam.stop()
 hdf5_2_video(filename)

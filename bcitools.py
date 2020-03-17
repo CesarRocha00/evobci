@@ -2,7 +2,9 @@ import cv2
 import h5py
 import numpy as np
 import pandas as pd
+import pathlib
 from math import ceil
+from time import sleep
 from datetime import datetime
 # EEG Tools
 from eegtools import *
@@ -19,9 +21,8 @@ from pyqtgraph import mkPen, GraphicsLayoutWidget
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
-from PyQt5.QtCore import (Qt, QDir, QUrl, QFile, QTime, QTimer, QThread,
-						  pyqtSignal as Signal, pyqtSlot as Slot)
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QStatusBar, QVBoxLayout,
+from PyQt5.QtCore import (Qt, QDir, QUrl, QFile, QTime, QThread)
+from PyQt5.QtWidgets import (QMainWindow, QLabel, QStatusBar, QVBoxLayout,
 							 QHBoxLayout, QPushButton, QWidget, QGroupBox, QLineEdit,
 							 QSizePolicy, QSlider, QStyle, QFileDialog, QRadioButton,
 							 QFormLayout, QGridLayout, QDesktopWidget, QCheckBox, QPlainTextEdit)
@@ -365,6 +366,7 @@ class EEGViewer(QThread):
 
 	def play(self):
 		self.state = self.RunningState
+		self.start()
 
 	def pause(self):
 		self.state = self.PausedState
@@ -396,44 +398,71 @@ class OCVWebcam(QThread):
 
 	def __init__(self):
 		super(OCVWebcam, self).__init__()
-		self.F = list()
 		self.source = None
 		self.state = self.StoppedState
-		self.filename = 'video.hdf5'
+		self.file = None
+		self.width = 0
+		self.height = 0
+		self.elapsed = 0
+		self.time_counter = 0
+		self.frame_counter = 0
 
 	def setSource(self, src, width=640, height=480):
 		self.source = cv2.VideoCapture(src)
+		self.width = width
+		self.height = height
 		self.source.set(cv2.CAP_PROP_FRAME_WIDTH, width)
 		self.source.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-		self.F.clear()
 
-	def getFrames(self):
-		return self.F
+	def updateElapsedTime(self):
+		difference = datetime.now() - self.elapsed
+		self.time_counter += difference.total_seconds()
 
-	def record(self, filename='video.hdf5'):
-		self.filename = filename
+	def record(self, filename):
+		self.file = h5py.File(filename, 'w')
 		self.state = self.RecordingState
+		self.time_counter = 0
+		self.frame_counter = 0
+		self.elapsed = datetime.now()
+		self.start()
 
 	def pause(self):
 		self.state = self.PausedState
+		self.updateElapsedTime()
 
 	def toggle(self):
 		self.state = self.PausedState if self.state == self.RecordingState else self.RecordingState
+		if self.state == self.PausedState:
+			self.updateElapsedTime()
+		else:
+			self.elapsed = datetime.now()
 
 	def stop(self):
 		self.state = self.StoppedState
 		self.quit()
+		while not self.isFinished():
+			pass
+		self.updateElapsedTime()
+		# Add attributes to file
+		fps = self.frame_counter / self.time_counter
+		self.file.attrs['fps'] = fps
+		self.file.attrs['width'] = self.width
+		self.file.attrs['height'] = self.height
+		self.file.attrs['length'] = self.frame_counter
+		self.file.attrs['duration'] = self.time_counter
+		self.file.close()
+		self.source.release()
 
 	def run(self):
 		while True:
 			if self.state == self.RecordingState:
 				ret, frame = self.source.read()
-				self.F.append(frame)
+				self.file.create_dataset('{}'.format(self.frame_counter), data=frame)
+				self.frame_counter += 1
 			elif self.state == self.PausedState:
 				pass
 			else:
 				break
-		self.source.release()
 
 
 class LSLClient(QThread):
@@ -465,6 +494,7 @@ class LSLClient(QThread):
 
 	def record(self):
 		self.state = self.RecordingState
+		self.start()
 
 	def pause(self):
 		self.state = self.PausedState
@@ -494,8 +524,6 @@ class EEGRecorder(QMainWindow):
 		self.setWindowTitle('EEG Recorder')
 		self.resize(480,640)
 		self.setContentsMargins(10, 10, 10, 10)
-		# Elapsed time holder
-		self.elapsed = 0
 		# Main widgets
 		self.videoDialog = FilePathDialog('Video file:', 'Open video', 'Video files (*.mp4)')
 		self.connectionForm = LSLForm('Lab Streaming Layer')
@@ -547,7 +575,7 @@ class EEGRecorder(QMainWindow):
 	def loadVideo(self):
 		path = self.videoDialog.getFullPath()
 		self.player.loadMedia(path)
-		self.camera.setSource(0)
+		self.camera.setSource(0, width=640, height=480)
 		self.startButton.setEnabled(True)
 
 	def mediaError(self):
@@ -568,11 +596,8 @@ class EEGRecorder(QMainWindow):
 			self.statusBar.showMessage('¡LSL server not specified!')
 			return
 		self.lsl.setStream('name', server)
+		self.camera.record('video.hdf5')
 		self.lsl.record()
-		self.lsl.start()
-		self.camera.record()
-		self.camera.start()
-		self.elapsed = datetime.now()
 		if self.player.isVideoAvailable():
 			self.player.play()
 		self.statusBar.showMessage('Recording...')
@@ -582,21 +607,20 @@ class EEGRecorder(QMainWindow):
 		self.loadButton.setEnabled(False)
 
 	def pauseAndResume(self):
-		if self.lsl.getState() == LSLClient.PausedState:
-			self.pauseResumeButton.setText('Pause')
-			self.statusBar.showMessage('Recording...')
-		else:
-			self.pauseResumeButton.setText('Resume')
-			self.statusBar.showMessage('Paused!')
 		self.lsl.toggle()
 		self.camera.toggle()
 		if self.player.isVideoAvailable():
 			self.player.toggle()
+		if self.lsl.getState() == LSLClient.PausedState:
+			self.pauseResumeButton.setText('Resume')
+			self.statusBar.showMessage('Paused!')
+		else:
+			self.pauseResumeButton.setText('Pause')
+			self.statusBar.showMessage('Recording...')
 
 	def stopAndSave(self):
 		self.lsl.stop()
 		self.camera.stop()
-		self.elapsed = datetime.now() - self.elapsed
 		self.statusBar.showMessage('Stopping LSL thread...')
 		while not self.lsl.isFinished():
 			pass
@@ -615,35 +639,35 @@ class EEGRecorder(QMainWindow):
 		self.startButton.setEnabled(False)
 		self.loadButton.setEnabled(True)
 
-	def getFileNames(self, path):
+	def getFilenames(self, path):
 		# File counter
 		i = 1
 		# Get personal information
 		subject = self.personalForm.getValues()
 		# Create the file base name
-		baseName = '{}-{}-{}-{}'.format(subject['name'], subject['last'], subject['age'], subject['sex'])
+		basename = '{}-{}-{}-{}'.format(subject['name'], subject['last'], subject['age'], subject['sex'])
 		# Get current date
 		date = datetime.today().strftime('%Y-%m-%d')
 		# Add elapsed time and date
-		baseName += '_{}'.format(date)
+		basename += '_{}'.format(date)
 		# Add file extension
-		fileName = baseName + '_{}.csv'.format(i)
+		filename = basename + '_{}.csv'.format(i)
 		# Complete the full path
-		dataFullPath =  path + fileName
+		dataFullPath =  path + filename
 		# Evaluate if the file name is already used
 		while QFile(dataFullPath).exists():
 			i += 1
-			fileName = baseName + '_{}.csv'.format(i)
-			dataFullPath =  path + fileName
+			filename = basename + '_{}.csv'.format(i)
+			dataFullPath =  path + filename
 		# Create a new full path to store the video file
-		fileName = baseName + '_{}.avi'.format(i)
-		videoFullPath = path + fileName
+		filename = basename + '_{}.avi'.format(i)
+		videoFullPath = path + filename
 		# Return data and video full paths
 		return (dataFullPath, videoFullPath)
 
 	def saveDataAndVideo(self, path):
 		# Get valid file names
-		dataFullPath, videoFullPath = self.getFileNames(path)
+		dataFullPath, videoFullPath = self.getFilenames(path)
 		# Get the EEG data
 		D = self.lsl.getData()
 		# Get the EEG channels
@@ -654,23 +678,9 @@ class EEGRecorder(QMainWindow):
 		# Export DataFrame to CSV
 		file.to_csv(dataFullPath, index=False)
 		self.statusBar.showMessage('EEG file saved as {}'.format(dataFullPath))
-		# Get and count all recorded frames
-		F = self.camera.getFrames()
-		total_frames = len(F)
-		# Compute the elapsed time
-		total_seconds = self.elapsed.total_seconds()
-		# Compute FPS
-		fps = total_frames / total_seconds
-		print('FPS:', fps)
-		print('Duration: {} seconds'.format(total_seconds))
-		# Set the video codec
-		codec = cv2.VideoWriter_fourcc(*"XVID")
-		# Prepare the output file writer
-		file = cv2.VideoWriter(videoFullPath, codec, fps, (320, 240))
-		# Write frames on file
-		for frame in F:
-			file.write(frame)
-		file.release()
+		# Rename video file
+		file = QFile('video.hdf5')
+		file.rename(videoFullPath)
 		self.statusBar.showMessage('Video file saved as {}'.format(videoFullPath))
 
 
