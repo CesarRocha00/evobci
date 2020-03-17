@@ -54,7 +54,7 @@ def hdf5_2_video(filename):
 	# Set codec and file extension
 	codec = 'mp4v' if os == 'Darwin' else 'XVID'
 	extension = '.mp4' if os == 'Darwin' else '.avi'
-	outputfile = filename.split('/')[-1].split('.')[0] + extension
+	outputfile = filename.replace('hdf5', extension)
 	fourcc = cv2.VideoWriter_fourcc(*codec)
 	# Open HDF5 file
 	file = h5py.File(filename, 'r')
@@ -83,10 +83,5 @@ def hdf5_2_video(filename):
 # video_2_hdf5(filename, 500)
 # hdf5_2_video(filename)
 
-filename = 'vid.hdf5'
-cam = OCVWebcam()
-cam.setSource(0)
-cam.record(filename)
-time.sleep(10)
-cam.stop()
+filename = '../../../../Desktop/John-Wick-35-Male_2020-03-17_1.hdf5'
 hdf5_2_video(filename)

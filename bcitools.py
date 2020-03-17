@@ -660,7 +660,7 @@ class EEGRecorder(QMainWindow):
 			filename = basename + '_{}.csv'.format(i)
 			dataFullPath =  path + filename
 		# Create a new full path to store the video file
-		filename = basename + '_{}.avi'.format(i)
+		filename = basename + '_{}.hdf5'.format(i)
 		videoFullPath = path + filename
 		# Return data and video full paths
 		return (dataFullPath, videoFullPath)
