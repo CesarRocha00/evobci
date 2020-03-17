@@ -214,23 +214,3 @@ class GeneticAlgorithm(object):
 		for i in range(self.n_vars):
 			print('\tx{}: {}'.format(i + 1, ind.phenotype[i]), sep='')
 		print('\tf(x): {}'.format(ind.fitness))
-
-class DifferentialEvolution(object):
-	"""docstring for DifferentialEvolution"""
-	def __init__(self, pop_size=4, n_generations=1, cxpb=0.9, minmax='min', seed=None):
-		super(DifferentialEvolution, self).__init__()
-		self.pop_size = pop_size
-		self.n_generations = n_generations
-		self.cxpb = cxpb
-		self.minmax = minmax
-		self.population = list()
-		self.variable_conf = dict()
-		self.variable_names = list()
-		self.n_vars = 0
-		self.func = None
-		self.comp = op.lt if minmax == 'min' else op.gt
-		self.reverse = False if minmax == 'min' else True
-		if seed is not None and seed >= 0:
-			np.random.seed(seed)
-		self.seed = np.random.get_state()[1][0]
-		
