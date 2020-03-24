@@ -9,44 +9,47 @@ def make_windows(D, wsize, labelID=None, wover=0):
 	y = [1 if 1 in win[labelID].values else 0 for win in X] if labelID is not None else []
 	return X, y
 
-def make_fixed_windows(D, wsize, labelID, wover=0, nwindows=1, step=1):
+# Function to split EEG (Pandas DataFrame) in fixed windows with event
+def make_fixed_windows(D, wsize, labelID, wover=0, step=1, padding=0):
+	# Half and remainder of a windowx
 	half = wsize // 2
 	remainder = wsize % 2
-	padding = (nwindows // 2) * step
-	include_ref = nwindows % 2 == 1
 	X, y = list(), list()
+	# Re-sample each event in data
 	while True:
 		targets = D[D[labelID] == 1].index
 		if targets.size == 0:
 			break
-		ref = targets[0]
-		# Compute limits
-		start = ref - padding
-		stop = ref + padding + 1
+		mark = targets[0]
+		# Compute range bounds
+		start = mark - half + padding
+		stop = mark + half + remainder - padding + 1
 		# Window extraction
 		for i in range(start, stop, step):
-			if i == ref and not include_ref:
-				continue
 			left = i - half
 			right = i + half + remainder
+			print(left, right)
 			X.append(D.iloc[left:right])
 			y.append(1)
 		# Remove central window
-		left = ref - half
-		right = ref + half + remainder
+		left = mark - half
+		right = mark + half + remainder
 		D.drop(range(left, right), inplace=True)
 		D.reset_index(drop=True, inplace=True)
 	_X, _y = make_windows(D, wsize, labelID, wover)
 	X.extend(_X)
 	y.extend(_y)
-	return X, y
 
 # Compute de maximum allowed size for a EEG DataFrame segmentation
 def max_window_size(D, labelID):
 	label = D[labelID]
 	index = label[label == 1].index
+	index = index.tolist()
+	# Add left and right bounds
+	index.insert(0, 0)
+	index.append(D.index[-1])
 	# One minute in samples
-	maxSize = 60 * 250
+	maxSize = float('inf')
 	for i in range(len(index) - 1):
 		dist = index[i + 1] - index[i]
 		if dist < maxSize: maxSize = dist
@@ -61,6 +64,7 @@ def balance_dataset(X, y):
 	index = np.concatenate((pos, fill), axis=0)
 	return (X[index], y[index])
 
+# Notch filter for EEG DataFrame
 def notch(D, fs, w0, n_cols, Q=30.0):
 	columns = D.columns[:n_cols]
 	X = D[columns].values.T
@@ -68,6 +72,7 @@ def notch(D, fs, w0, n_cols, Q=30.0):
 	X = filtfilt(b, a, X)
 	D[columns] = X.T
 
+# Bandpass filter for EEG DataFrame
 def bandpass(D, fs, low, high, order, n_cols):
 	columns = D.columns[:n_cols]
 	X = D[columns].values.T

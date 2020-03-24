@@ -22,10 +22,10 @@ from PyQt5.QtGui import QPixmap
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
 from PyQt5.QtCore import (Qt, QDir, QUrl, QFile, QTime, QThread)
-from PyQt5.QtWidgets import (QMainWindow, QLabel, QStatusBar, QVBoxLayout,
-							 QHBoxLayout, QPushButton, QWidget, QGroupBox, QLineEdit,
-							 QSizePolicy, QSlider, QStyle, QFileDialog, QRadioButton,
-							 QFormLayout, QGridLayout, QDesktopWidget, QCheckBox, QPlainTextEdit)
+from PyQt5.QtWidgets import (QMainWindow, QLabel, QStatusBar, QVBoxLayout, QHBoxLayout,
+							 QPushButton, QWidget, QGroupBox, QLineEdit, QSizePolicy,
+							 QSlider, QStyle, QFileDialog, QRadioButton, QFormLayout, 
+							 QGridLayout, QDesktopWidget, QCheckBox, QPlainTextEdit)
 
 __version__ = '0.1'
 __author__ = 'César Rocha'
