@@ -18,7 +18,7 @@ from sklearn.model_selection import train_test_split
 # PyQtGraph
 from pyqtgraph import mkPen, GraphicsLayoutWidget
 # PyQt5
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap,  QIcon
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
 from PyQt5.QtCore import (Qt, QDir, QUrl, QFile, QTime, QThread)
@@ -522,6 +522,7 @@ class EEGRecorder(QMainWindow):
 	def __init__(self):
 		super(EEGRecorder, self).__init__()
 		self.setWindowTitle('EEG Recorder')
+		self.setWindowIcon(QIcon('./icons/record.png'))
 		self.resize(480,640)
 		self.setContentsMargins(10, 10, 10, 10)
 		# Main widgets
@@ -1008,6 +1009,8 @@ class BCIVisualizer(QMainWindow):
 		self.wsizeEdit.setAlignment(Qt.AlignCenter)
 		self.wpercEdit = QLineEdit('0.0')
 		self.wpercEdit.setAlignment(Qt.AlignCenter)
+		self.wstepEdit = QLineEdit('1')
+		self.wstepEdit.setAlignment(Qt.AlignCenter)
 		self.statsEdit = QPlainTextEdit()
 		# Checkboxes
 		self.fixedCheck = QCheckBox('Fixed')
@@ -1085,18 +1088,20 @@ class BCIVisualizer(QMainWindow):
 		windowLayout.addWidget(QLabel('Overlap (%)'), 0, 1, alignment=Qt.AlignCenter)
 		windowLayout.addWidget(self.wpercEdit, 1, 1, alignment=Qt.AlignCenter)
 		windowLayout.addWidget(self.fixedCheck, 0, 2, 2, 1, alignment=Qt.AlignCenter)
+		windowLayout.addWidget(QLabel('Step (samples)'), 0, 3, alignment=Qt.AlignCenter)
+		windowLayout.addWidget(self.wstepEdit, 1, 3, alignment=Qt.AlignCenter)
 		windowGBox.setLayout(windowLayout)
 
 		paramsLayout = QHBoxLayout()
 		paramsLayout.addWidget(self.filteringForm, 6)
-		paramsLayout.addWidget(windowGBox, 3)
+		paramsLayout.addWidget(windowGBox, 4)
 		paramsLayout.addWidget(self.validationPanel, 3)
-		paramsLayout.addWidget(self.applyButton, 1)
 
 		mainLayout = QVBoxLayout()
 		mainLayout.addLayout(viewLayout)
 		mainLayout.addWidget(self.channelPanel)
 		mainLayout.addLayout(paramsLayout)
+		mainLayout.addWidget(self.applyButton, alignment=Qt.AlignCenter)
 		mainLayout.addWidget(self.runButton, alignment=Qt.AlignCenter)
 		# Main widget
 		mainWidget = QWidget()
@@ -1185,6 +1190,7 @@ class BCIVisualizer(QMainWindow):
 			maxWsize = max_window_size(self.T_tmp, self.labelID)
 			if self.param['wsize'] > maxWsize:
 				self.param['wsize'] = maxWsize
+				self.wsizeEdit.text(str(maxWsize))
 				self.param['wover'] = int(round(self.param['wsize'] * self.param['wperc']))
 			self.T_tmp, self.y_train = make_fixed_windows(self.T_tmp, self.param['wsize'], self.labelID, self.param['wover'])
 		else:
