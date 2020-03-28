@@ -1,3 +1,4 @@
+import sys
 import cv2
 import h5py
 import time
@@ -46,7 +47,7 @@ def video_2_hdf5(filename, frame_limit):
 	# Close HDF5 file
 	file.close()
 	# Print information
-	print('Filename: {}\nFPS: {}\nFrames: {}\nSeconds: {}'.format(filename, fps, total_frames, total_seconds))
+	print('Filename: {}\nFPS: {}\nFrames: {}\nDuration (s): {}'.format(filename, fps, total_frames, total_seconds))
 
 def hdf5_2_video(filename):
 	# Get system OS
@@ -56,6 +57,8 @@ def hdf5_2_video(filename):
 	extension = '.mp4' if os == 'Darwin' else '.avi'
 	outputfile = filename.replace('hdf5', extension)
 	fourcc = cv2.VideoWriter_fourcc(*codec)
+	# Initialize timer
+	elapsed = datetime.now()
 	# Open HDF5 file
 	file = h5py.File(filename, 'r')
 	# Get attributes
@@ -76,12 +79,10 @@ def hdf5_2_video(filename):
 	output.release()
 	# Close HDF5 file
 	file.close()
+	# Stop timer
+	elapsed = datetime.now() - elapsed
 	# Print information
-	print('Filename: {}\nFPS: {}\nFrames: {}\nSeconds: {}'.format(filename, fps, length, duration))
+	print('Filename: {}\nFPS: {}\nFrames: {}\nDuration (s): {}\nElapsed Time (s): {}'.format(outputfile, fps, length, duration, elapsed.total_seconds()))
 
-# filename = '../../../../Desktop/video.hdf5'
-# video_2_hdf5(filename, 500)
-# hdf5_2_video(filename)
-
-filename = '../../../../Desktop/Jane-Doe-25-Female_2020-03-27_1.hdf5'
+filename = sys.argv[1]
 hdf5_2_video(filename)
