@@ -2,7 +2,6 @@ import cv2
 import h5py
 import numpy as np
 import pandas as pd
-import pathlib
 from math import ceil
 from time import sleep
 from datetime import datetime
@@ -21,7 +20,7 @@ from pyqtgraph import mkPen, GraphicsLayoutWidget
 from PyQt5.QtGui import QPixmap,  QIcon
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
-from PyQt5.QtCore import (Qt, QDir, QUrl, QFile, QTime, QThread)
+from PyQt5.QtCore import (Qt, QDir, QUrl, QFile, QThread)
 from PyQt5.QtWidgets import (QMainWindow, QLabel, QStatusBar, QVBoxLayout, QHBoxLayout,
 							 QPushButton, QWidget, QGroupBox, QLineEdit, QSizePolicy,
 							 QSlider, QStyle, QFileDialog, QRadioButton, QFormLayout, 
@@ -275,7 +274,9 @@ class EEGViewer(QThread):
 		self.plotItem = list()
 		self.plotTrace = dict()
 		# Holders
+		self.wait = 0
 		self.wsize = 0
+		self.hsize = 0
 		self.color = dict()
 		self.window = list([0, 0])
 		self.channel = list()
@@ -298,9 +299,12 @@ class EEGViewer(QThread):
 	def setSize(self, width, height):
 		self.view.resize(width, height)
 
-	def configure(self, channel, color, wsize):
+	def configure(self, channel, color, wsize, fs=0):
 		# Link params
+		nCh = len(channel)
+		self.wait = 1 / (fs * nCh) if fs > 0 else 0
 		self.wsize = wsize
+		self.hsize = wsize / 2
 		self.color = color
 		self.channel = channel
 		self.window = np.array([0, wsize])
@@ -319,7 +323,7 @@ class EEGViewer(QThread):
 		canvas.disableAutoRange()
 		canvas.setClipToView(True)
 		canvas.setLimits(yMin=0, yMax=1)
-		canvas.setDownsampling(mode='peak')
+		canvas.setDownsampling(mode='subsample')
 		canvas.showGrid(x=True, y=True, alpha=0.25)
 		for ch in self.channel:
 			pen = mkPen(color=self.color[ch], width=2)
@@ -335,7 +339,7 @@ class EEGViewer(QThread):
 			canvas.disableAutoRange()
 			canvas.setClipToView(True)
 			canvas.setLimits(yMin=0, yMax=1)
-			canvas.setDownsampling(mode='peak')
+			canvas.setDownsampling(mode='subsample')
 			canvas.showGrid(x=True, y=True, alpha=0.25)
 			self.plotItem.append(canvas)
 			self.plotTrace[ch] = canvas.plot(pen=pen)
@@ -353,15 +357,14 @@ class EEGViewer(QThread):
 			canvas.addLine(x=position)
 
 	def setPosition(self, position):
-		hsize = self.wsize / 2
-		self.window[0] = position - hsize
-		self.window[1] = position + hsize
+		self.window[0] = position - self.hsize
+		self.window[1] = position + self.hsize
 		self.position = position
 		self.update()
 
 	def update(self):
 		for plot in self.plotItem:
-			plot.setRange(xRange=self.window, yRange=[0.0,1.0])
+			plot.setRange(xRange=self.window)
 		self.position += 1 if self.position < self.maxPosition else 0
 
 	def play(self):
@@ -387,6 +390,7 @@ class EEGViewer(QThread):
 				pass
 			else:
 				break
+			sleep(self.wait)
 
 
 class OCVWebcam(QThread):
@@ -695,7 +699,6 @@ class EEGLabeling(QMainWindow):
 		self.D = None
 		self.X = None
 		self.fs = 0
-		self.wsize = 0
 		self.label = list()
 		self.maxDuration = 0
 		# Main widgets
@@ -713,10 +716,8 @@ class EEGLabeling(QMainWindow):
 		self.player.mediaStatusChanged.connect(self.mediaStatusChanged)
 		self.player.videoAvailableChanged.connect(self.videoAvailableChanged)
 		# Threads
-		self.eegViewer = EEGViewer(mode='multiple')
+		self.eegViewer = EEGViewer(mode='single')
 		# EditLines
-		self.wsizeEdit = QLineEdit('250')
-		self.wsizeEdit.setAlignment(Qt.AlignCenter)
 		self.timeEdit = QLineEdit('--:--:--')
 		self.timeEdit.setAlignment(Qt.AlignCenter)
 		self.indexEdit = QLineEdit('')
@@ -756,8 +757,6 @@ class EEGLabeling(QMainWindow):
 		self.positionSlider.setRange(0, 1)
 		self.positionSlider.sliderMoved.connect(self.setPosition)
 		# GroupBoxes
-		windowGBox = QGroupBox('Window')
-		windowGBox.setAlignment(Qt.AlignCenter)
 		searchGBox = QGroupBox('Search')
 		searchGBox.setAlignment(Qt.AlignCenter)
 		labelingGBox = QGroupBox('Labeling')
@@ -771,14 +770,8 @@ class EEGLabeling(QMainWindow):
 		sourceLayout.addWidget(self.videoDialog, 1, 0)
 		sourceLayout.addWidget(self.loadButton, 0, 1, 2, 1)
 
-		windowLayout = QVBoxLayout()
-		windowLayout.addWidget(QLabel('Num. samples'), alignment=Qt.AlignCenter)
-		windowLayout.addWidget(self.wsizeEdit, alignment=Qt.AlignCenter)
-		windowGBox.setLayout(windowLayout)
-
 		paramsLayout = QHBoxLayout()
-		paramsLayout.addWidget(self.filteringForm, 12)
-		paramsLayout.addWidget(windowGBox, 2)
+		paramsLayout.addWidget(self.filteringForm, 7)
 		paramsLayout.addWidget(self.applyButton,1)
 
 		searchLayout = QGridLayout()
@@ -837,10 +830,10 @@ class EEGLabeling(QMainWindow):
 		self.statusBar.showMessage('Error: {}'.format(self.player.errorString()))
 
 	def setPosition(self, position):
+		print('SetPos')
 		if self.player.isVideoAvailable():
 			self.player.setPosition(position)
-		else:
-			self.eegViewer.setPosition(position)
+			self.findIndex()
 
 	def durationChanged(self, duration):
 		self.maxDuration = duration
@@ -849,13 +842,13 @@ class EEGLabeling(QMainWindow):
 
 	def positionChanged(self, position):
 		self.positionSlider.setValue(position)
-		h = (position / 3600000) % 24
-		m = (position / 60000) % 60
-		s = (position / 1000) % 60
-		i = (position / 1000) * self.wsize
-		self.eegViewer.setPosition(i)
-		elapsed = QTime(h,m,s)
-		self.timeEdit.setText(elapsed.toString())
+		s = position // 1000
+		m = s // 60
+		s = s % 60
+		h = m // 60
+		m = m % 60
+		elapsed = '{:02d}:{:02d}:{:02d}'.format(h,m,s)
+		self.timeEdit.setText(elapsed)
 
 	def stateChanged(self, state):
 		if state == VideoPlayer.PlayingState:
@@ -889,14 +882,13 @@ class EEGLabeling(QMainWindow):
 		param = self.filteringForm.getValues()
 		channel = self.channelPanel.getChecked()
 		color = self.channelPanel.getColors()
-		self.wsize = int(self.wsizeEdit.text().strip())
 		numCh = param['channels']
 		self.fs = param['fs']
 		notch(self.X, self.fs, param['notch'], numCh)
 		bandpass(self.X, self.fs, param['low'], param['high'], param['order'], numCh)
 		self.X[self.X.columns[:numCh]] = MinMaxScaler().fit_transform(self.X[self.X.columns[:numCh]])
 		self.label = np.array([0] * self.D.index.size)
-		self.eegViewer.configure(channel, color, self.wsize)
+		self.eegViewer.configure(channel, color, self.fs * 1.2, self.fs)
 		self.eegViewer.plotData(self.X)
 		self.eegViewer.setPosition(0)
 		self.addButton.setEnabled(True)
@@ -909,19 +901,24 @@ class EEGLabeling(QMainWindow):
 	def play(self):
 		if self.player.isVideoAvailable():
 			self.player.toggle()
+		if self.eegViewer.getState() == EEGViewer.StoppedState:
+			self.eegViewer.play()
+		else:
+			self.eegViewer.toggle()
+		self.findIndex()
 		self.playButton.setFocus()
 
 	def stop(self):
 		if self.player.isVideoAvailable():
 			self.player.stop()
+		self.eegViewer.stop()
 		self.playButton.setFocus()
 		self.applyButton.setEnabled(True)
 
 	def timeToSeconds(self):
 		text = self.timeEdit.text()
 		h, m, s = text.split(':')
-		h, m, s = int(h), int(m), int(s)
-		seconds = h * 3600 + m * 60 + s
+		seconds = int(h) * 3600 + int(m) * 60 + int(s)
 		return seconds
 
 	def findTime(self):
@@ -958,7 +955,7 @@ class BCIVisualizer(QMainWindow):
 		self.setWindowTitle('BCI Visualizer')
 		self.resize(1280, 720)
 		self.setContentsMargins(10, 0, 10, 10)
-		self.labelID = 'Label'
+		self.label_id = ''
 		# Variables
 		self.T = None
 		self.V = None
@@ -976,14 +973,14 @@ class BCIVisualizer(QMainWindow):
 		self.plotViewer = dict()
 		self.pixmap = dict()
 		self.indexLabel = dict()
-		self.validation = 'Training'
+		self.action = ''
 		# Main widgets
 		self.leftFileDialog = FilePathDialog('T. EEG file:', 'Open file', 'EEG files (*.csv)')
 		self.rightFileDialog = FilePathDialog('V. EEG file:', 'Open file', 'EEG files (*.csv)')
 		self.channelPanel = CheckBoxPanel(title='Channels')
 		self.filteringForm = FilteringForm(title='Filtering')
-		self.validationPanel = RadioButtonPanel(title='Validation with')
-		self.validationPanel.setOptions(['Training', 'Validation', 'Prediction'])
+		self.validationPanel = RadioButtonPanel(title='Action to execute')
+		self.validationPanel.setOptions(['Validation', 'Prediction'])
 		# Threads
 		self.plotViewer['left'] = EEGViewer(mode='single')
 		self.plotViewer['right'] = EEGViewer(mode='single')
@@ -1007,10 +1004,12 @@ class BCIVisualizer(QMainWindow):
 		# EditLines
 		self.wsizeEdit = QLineEdit('250')
 		self.wsizeEdit.setAlignment(Qt.AlignCenter)
-		self.wpercEdit = QLineEdit('0.0')
-		self.wpercEdit.setAlignment(Qt.AlignCenter)
-		self.wstepEdit = QLineEdit('1')
+		self.woverEdit = QLineEdit('0.0')
+		self.woverEdit.setAlignment(Qt.AlignCenter)
+		self.wstepEdit = QLineEdit('0.0')
 		self.wstepEdit.setAlignment(Qt.AlignCenter)
+		self.wpaddEdit = QLineEdit('0.0')
+		self.wpaddEdit.setAlignment(Qt.AlignCenter)
 		self.statsEdit = QPlainTextEdit()
 		# Checkboxes
 		self.fixedCheck = QCheckBox('Fixed')
@@ -1037,6 +1036,7 @@ class BCIVisualizer(QMainWindow):
 		self.applyButton.setEnabled(False)
 		self.applyButton.clicked.connect(self.applyParameters)
 		self.runButton = QPushButton('Run NN')
+		self.runButton.setIcon(self.icon.standardIcon(QStyle.SP_MediaPlay))
 		self.runButton.clicked.connect(self.runExperiment)
 		self.runButton.setEnabled(False)
 		# GroupBoxes
@@ -1086,16 +1086,18 @@ class BCIVisualizer(QMainWindow):
 		windowLayout.addWidget(QLabel('Size (samples)'), 0, 0, alignment=Qt.AlignCenter)
 		windowLayout.addWidget(self.wsizeEdit, 1, 0, alignment=Qt.AlignCenter)
 		windowLayout.addWidget(QLabel('Overlap (%)'), 0, 1, alignment=Qt.AlignCenter)
-		windowLayout.addWidget(self.wpercEdit, 1, 1, alignment=Qt.AlignCenter)
+		windowLayout.addWidget(self.woverEdit, 1, 1, alignment=Qt.AlignCenter)
 		windowLayout.addWidget(self.fixedCheck, 0, 2, 2, 1, alignment=Qt.AlignCenter)
-		windowLayout.addWidget(QLabel('Step (samples)'), 0, 3, alignment=Qt.AlignCenter)
+		windowLayout.addWidget(QLabel('Step (%)'), 0, 3, alignment=Qt.AlignCenter)
 		windowLayout.addWidget(self.wstepEdit, 1, 3, alignment=Qt.AlignCenter)
+		windowLayout.addWidget(QLabel('Padding (%)'), 0, 4, alignment=Qt.AlignCenter)
+		windowLayout.addWidget(self.wpaddEdit, 1, 4, alignment=Qt.AlignCenter)
 		windowGBox.setLayout(windowLayout)
 
 		paramsLayout = QHBoxLayout()
 		paramsLayout.addWidget(self.filteringForm, 6)
-		paramsLayout.addWidget(windowGBox, 4)
-		paramsLayout.addWidget(self.validationPanel, 3)
+		paramsLayout.addWidget(windowGBox, 5)
+		paramsLayout.addWidget(self.validationPanel, 2)
 
 		mainLayout = QVBoxLayout()
 		mainLayout.addLayout(viewLayout)
@@ -1117,9 +1119,6 @@ class BCIVisualizer(QMainWindow):
 		path = self.leftFileDialog.getFullPath()
 		try:
 			self.T = pd.read_csv(path)
-			if self.labelID not in self.T.columns:
-				self.statusBar.showMessage('Training EEG file MUST have the Label field on the last column!')
-				return
 			self.statusBar.showMessage('Training EEG file was successfully loaded!')
 			self.createChannelWidgets()
 		except:
@@ -1137,6 +1136,7 @@ class BCIVisualizer(QMainWindow):
 		self.applyButton.setEnabled(True)
 
 	def createChannelWidgets(self):
+		self.label_id = self.T.columns[-1]
 		columns = self.T.columns[:-1]
 		self.channelPanel.setOptions(columns)
 
@@ -1145,13 +1145,8 @@ class BCIVisualizer(QMainWindow):
 		if len(channels) == 0:
 			self.statusBar.showMessage('You must select at least one channel!')
 			return
-		filters = self.filteringForm.getValues()
-		self.param['channel'] = channels[0]
-		self.param['wsize'] = int(self.wsizeEdit.text().strip())
-		self.param['wperc'] = float(self.wpercEdit.text().strip())
-		self.param['wover'] = int(round(self.param['wsize'] * self.param['wperc']))
-		self.param['label'] = self.labelID
 		# Data backup and preprocesing
+		filters = self.filteringForm.getValues()
 		# Training
 		if self.T is not None:
 			self.T_tmp = self.applyFilters(self.T, filters, channels)
@@ -1161,11 +1156,18 @@ class BCIVisualizer(QMainWindow):
 		# Validation
 		if self.V is not None:
 			self.V_tmp = self.applyFilters(self.V, filters, channels)
+		# Window parameters
+		self.param['channel'] = channels[0]
+		self.param['wsize'] = int(self.wsizeEdit.text().strip())
+		self.param['wover'] = float(self.woverEdit.text().strip())
+		self.param['fixed'] = self.fixedCheck.isChecked()
+		self.param['wstep'] = float(self.wstepEdit.text().strip())
+		self.param['wpadd'] = float(self.wpaddEdit.text().strip())
+		self.param['label'] = self.label_id
 		# Reset labels and counters
 		self.resetStates()
 		# Now try to create the traininig and testing datasets
 		self.createDatasets(channels)
-		self.runButton.setEnabled(True)
 
 	def applyFilters(self, D, filters, channels):
 		C = D.copy()
@@ -1173,8 +1175,8 @@ class BCIVisualizer(QMainWindow):
 		bandpass(C, filters['fs'], filters['low'], filters['high'], filters['order'], filters['channels'])
 		C[channels] = MinMaxScaler().fit_transform(C[channels])
 		# Remove non selected channels
-		if self.labelID in C.columns:	
-			channels.append(self.labelID)
+		if self.label_id in C.columns:	
+			channels.append(self.label_id)
 			C = C[channels]
 			channels.pop()
 		else:
@@ -1182,41 +1184,34 @@ class BCIVisualizer(QMainWindow):
 		return C
 
 	def createDatasets(self, channels):
-		fixed = self.fixedCheck.isChecked()
 		colors = self.channelPanel.getColors()
 		valType = self.validationPanel.getChecked()
 		# Verify if fixed windows will be used
-		if fixed:
-			maxWsize = max_window_size(self.T_tmp, self.labelID)
+		if self.param['fixed']:
+			maxWsize = max_window_size(self.T_tmp, self.label_id)
 			if self.param['wsize'] > maxWsize:
-				self.param['wsize'] = maxWsize
-				self.wsizeEdit.text(str(maxWsize))
-				self.param['wover'] = int(round(self.param['wsize'] * self.param['wperc']))
-			self.T_tmp, self.y_train = make_fixed_windows(self.T_tmp, self.param['wsize'], self.labelID, self.param['wover'])
-		else:
-			self.T_tmp, self.y_train = make_windows(self.T_tmp, self.param['wsize'], self.labelID, self.param['wover'])
+				self.statusBar.showMessage('There are some fixed windows overlaped. Check the window size.')
+		self.T_tmp, self.y_train = extract_windows(self.T_tmp, self.param['wsize'], self.label_id, self.param['wover'], self.param['fixed'], self.param['wstep'], self.param['wpadd'])
 		# Check validation type to create training and testing dataset 
-		self.validation = 'Training'
-		if valType == 'Validation' and self.V is not None and self.labelID in self.V.columns:
+		if valType == 'Validation' and self.V is not None and self.label_id in self.V.columns:
 			# Copy for custom validation
 			self.X = self.V_tmp.copy()
-			self.V_tmp, self.y_test = make_windows(self.V_tmp, self.param['wsize'], self.labelID, self.param['wover'])
-			self.validation = valType
+			self.V_tmp, self.y_test = extract_windows(self.V_tmp, self.param['wsize'], self.label_id, self.param['wover'], False, 0.0, 0.0)
+			self.action = valType
 		elif valType == 'Prediction' and self.V is not None:
-			self.V_tmp, self.y_test = make_windows(self.V_tmp, self.param['wsize'], None, self.param['wover'])
-			self.validation = valType
+			self.V_tmp, self.y_test = extract_windows(self.V_tmp, self.param['wsize'], self.label_id, self.param['wover'], False, 0.0, 0.0)
+			self.action = valType
 		else:
-			self.T_tmp, self.V_tmp, self.y_train, self.y_test = train_test_split(self.T_tmp, self.y_train, test_size=0.3)
+			# self.T_tmp, self.V_tmp, self.y_train, self.y_test = train_test_split(self.T_tmp, self.y_train, test_size=0.3)
+			self.statusBar.showMessage('There was an error with {} EEG file.'.format(valType))
+			return
 		# Map lists of windows to numpy arrays
 		self.X_train = np.array([win[channels[0]].values for win in self.T_tmp])
 		self.y_train = np.array(self.y_train)
 		self.X_test = np.array([win[channels[0]].values for win in self.V_tmp])
 		self.y_test = np.array(self.y_test)
 		# Message of dataset creation
-		if self.validation != valType:
-			self.statusBar.showMessage('There was an error with {} EEG file. Datasets created from Training EEG file by split 70 / 30.'.format(valType))
-		else:
-			self.statusBar.showMessage('Datasets are ready!')
+		self.statusBar.showMessage('Datasets are ready!')
 		# EEG viewer setup
 		self.plotViewer['left'].configure(channels, colors, self.param['wsize'])
 		self.plotViewer['right'].configure(channels, colors, self.param['wsize'])
@@ -1224,32 +1219,40 @@ class BCIVisualizer(QMainWindow):
 		self.plotTotal['left'] = len(self.X_train)
 		# Plot first training window
 		self.updatePlot('left', 1)
+		# Activate run button
+		self.runButton.setEnabled(True)
 
 	def runExperiment(self):
 		neuralnet = MLP_NN()
+		# Input and output dimension
 		input_dim = self.param['wsize']
-		layer = [input_dim * 2, input_dim, 1]
+		output_dim = 1
+		# Ratio for pyramid shape in hidden layers
+		ratio_io = int((input_dim / output_dim) ** (1 / 3))
+		# Hidden layer dimension
+		hidden_1 = output_dim * (ratio_io ** 2)
+		hidden_2 = output_dim * ratio_io
+		# Layer configuration
+		layer = [hidden_1, hidden_2, output_dim]
+		# Activation functions for each layer
 		activation = ['relu', 'relu', 'sigmoid']
+		# Optimizer for learning
 		optimizer = 'adam'
+		# Loss function for learning
 		loss = 'mean_squared_error'
+		# Required metrics
 		metrics = ['accuracy']
 		self.statusBar.showMessage('Building neural network...')
 		neuralnet.build(input_dim, layer, activation, optimizer, loss, metrics)
 		self.statusBar.showMessage('Running training phase...')
-		neuralnet.training(self.X_train, self.y_train, val_size=0.3, epochs=200)
+		neuralnet.training(self.X_train, self.y_train, val_size=0.3, epochs=100)
 		# Get results
-		if self.validation == 'Prediction':
+		if self.action == 'Prediction':
 			score = neuralnet.prediction(self.X_test)
 			self.y_pred = score
 			self.updateStats(score, 'prediction')
 		else:
-			# score = neuralnet.evaluation(self.X_test, self.y_test)
-			# self.updateStats(score, 'evaluation')
-			# score = neuralnet.validation(self.X_test, self.y_test)
-			# self.y_pred = score['pred']
-			# self.updateStats(score, 'validation')
-			self.param['wover'] = int(round(self.param['wsize'] * 0.75))
-			score = neuralnet.custom_validation(self.X, self.param)
+			score = neuralnet.my_validation(self.X, self.param['wsize'], self.param['wover'], self.param['channel'], self.label_id)
 			self.V_tmp, self.y_test, self.y_pred = score['X_test'], score['y_test'], score['y_pred']
 			self.updateStats(score, 'validation')
 		self.statusBar.showMessage('Neural network has finished!')
@@ -1282,11 +1285,7 @@ class BCIVisualizer(QMainWindow):
 		self.indexLabel[side].setText('{} / {}'.format(self.plotIndex[side] + 1, self.plotTotal[side]))
 
 	def updateStats(self, score, desc):
-		if desc == 'evaluation':
-			summary = 'EVALUATION\n'
-			summary += '-> Loss: {}\n-> Accuracy: {}\n'.format(round(score[0], 5), round(score[1], 5))
-			self.statsEdit.insertPlainText(summary)
-		elif desc == 'validation':
+		if desc == 'validation':
 			summary = 'VALIDATION\n'
 			summary += '-> TP: {}\n-> FP: {}\n'.format(score['tp'], score['fp'])
 			summary += '-> TN: {}\n-> FN: {}\n'.format(score['tn'], score['fn'])

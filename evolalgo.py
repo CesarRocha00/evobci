@@ -1,7 +1,9 @@
+import sys
 import math
 import numpy as np
 import operator as op
 from copy import deepcopy
+from datetime import datetime
 
 def bits_4_range(lower, upper, precision):
 	return int(math.ceil(math.log2((upper - lower) * math.pow(10, precision) + 1)))
@@ -56,9 +58,8 @@ class GeneticAlgorithm(object):
 		self.func = None
 		self.comp = op.lt if minmax == 'min' else op.gt
 		self.reverse = False if minmax == 'min' else True
-		if seed is not None and seed >= 0:
-			np.random.seed(seed)
-		self.seed = np.random.get_state()[1][0]
+		self.seed = seed if seed is not None and seed >= 0 else np.random.randint(10000000)
+		np.random.seed(self.seed)
 
 	def set_variable_conf(self, conf):
 		for var in conf:
@@ -190,13 +191,18 @@ class GeneticAlgorithm(object):
 		self.population = self.population[:self.pop_size]
 
 	def execute(self):
+		duration = 0
+		elapsed = datetime.now()
 		self.initialize_pop()
 		self.decode_pop(self.population)
 		self.evaluation_pop(self.population)
 		self.sort_population(self.population)
 		gbest = self.population[0]
-		print('[{}]\tf(x) = {}\t{}'.format(0, gbest.fitness, gbest.phenotype))
+		elapsed = datetime.now() - elapsed
+		duration += elapsed.total_seconds()
+		print('[{}]\tf(x) = {}\t{}\t{} sec'.format(0, gbest.fitness, gbest.phenotype, elapsed.total_seconds()))
 		for i in range(self.n_generations):
+			elapsed = datetime.now()
 			self.tournament_selection()
 			self.crossover_pop()
 			self.mutation_pop(self.population[self.pop_size:])
@@ -206,7 +212,12 @@ class GeneticAlgorithm(object):
 			fbest = self.population[0]
 			if self.comp(fbest.fitness, gbest.fitness):
 				gbest = deepcopy(fbest)
-			print('[{}]\tf(x) = {}\t{}'.format(i + 1, gbest.fitness, gbest.phenotype))
+			elapsed = datetime.now() - elapsed
+			duration += elapsed.total_seconds()
+			print('[{}]\tf(x) = {}\t{}\t{} sec'.format(i + 1, gbest.fitness, gbest.phenotype, elapsed.total_seconds()))
+		gen_avg = duration / (self.n_generations + 1)
+		ind_avg = duration / (self.pop_size * (self.n_generations + 1))
+		print('Elapsed time: {} sec\nAverage per generation: {} sec\nAverage per individual: {} sec'.format(duration, gen_avg, ind_avg))
 		return (gbest, self.seed)
 
 	def print_ind(self, ind):

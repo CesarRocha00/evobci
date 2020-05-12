@@ -1,9 +1,15 @@
 import os
 import numpy as np
+import tensorflow as tf
 import tensorflow.keras as kr
 
 # Prevent log messages from tensorflow
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+# Physical cores (minus one for main system operation)
+tf.config.threading.set_intra_op_parallelism_threads(3)
+# Default configuration (recommended)
+tf.config.threading.set_inter_op_parallelism_threads(2)
 
 class MLP_NN(kr.models.Sequential):
 	"""docstring for MLP_NN"""
@@ -40,22 +46,26 @@ class MLP_NN(kr.models.Sequential):
 			accuracy = 0.5 * (TP / positives) + 0.5 * (TN / negatives)
 		return {'pred': z, 'tp': TP, 'fp': FP, 'tn': TN, 'fn': FN, 'acc': accuracy}
 
-	def custom_validation(self, D, param):
+	def my_validation(self, D, wsize, wover, channel, label_id):
+		# Lists to store the splited windows
 		X_test = list()
 		y_test = list()
 		y_pred = list()
-		step = param['wsize'] - param['wover']
-		i, j = 0, param['wsize']
-		possibleFN = False
+		# Step for window overlap
+		wover_val = int(round(wover * wsize))
+		step = wsize - wover_val
+		# Index for window delimitation
+		i, j = 0, wsize
+		# Confusion matrix counters
 		TP = FP = TN = FN = 0
-		count = 1
+		# Holder for posible False Negative
+		possibleFN = False
 		while j < D.index.size:
 			win = D.iloc[i:j]
-			real = 1 if 1 in win[param['label']].values else 0
-			# if real == 1:
-			# 	print(count, np.argmax(win[param['label']].values))
-			# count += 1
-			pred = self.prediction(np.array([win[param['channel']].values]))[0]
+			real = 1 if 1 in win[label_id].values else 0
+			# Make the prediction
+			pred = self.prediction(np.array([win[channel].values]))[0]
+			# Store window and its labels
 			X_test.append(win)
 			y_test.append(real)
 			y_pred.append(pred)
@@ -73,8 +83,8 @@ class MLP_NN(kr.models.Sequential):
 				FN += 1
 				possibleFN = False
 			# Next window index
-			i += param['wsize'] if real == 1 and pred == 1 else step
-			j += param['wsize'] if real == 1 and pred == 1 else step
+			i += wsize if real == 1 and pred == 1 else step
+			j += wsize if real == 1 and pred == 1 else step
 		# Stats
 		positives = TP + FN
 		negatives = TN + FP
