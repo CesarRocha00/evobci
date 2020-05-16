@@ -7,9 +7,9 @@ import tensorflow.keras as kr
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 # Physical cores (minus one for main system operation)
-tf.config.threading.set_intra_op_parallelism_threads(3)
+# tf.config.threading.set_intra_op_parallelism_threads(3)
 # Default configuration (recommended)
-tf.config.threading.set_inter_op_parallelism_threads(2)
+# tf.config.threading.set_inter_op_parallelism_threads(2)
 
 class MLP_NN(kr.models.Sequential):
 	"""docstring for MLP_NN"""
@@ -24,29 +24,16 @@ class MLP_NN(kr.models.Sequential):
 			self.add(kr.layers.Dense(layer[i], activation=activation[i]))
 		self.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-	def training(self, X, y, val_size=None, epochs=10, verbose=0):
-		history = self.fit(X, y, epochs=epochs, validation_split=val_size, shuffle=True, verbose=verbose)
+	def train(self, X, y, val_size=None, epochs=10, verbose=0):
+		history = None
+		device_name = '/device:CPU:0' if tf.test.gpu_device_name() != '/device:GPU:0' else '/device:GPU:0'
+		if verbose > 0:
+			print('Training with {}'.format(device_name))
+		with tf.device(device_name):
+			history = self.fit(X, y, epochs=epochs, validation_split=val_size, shuffle=True, verbose=verbose)
 		return history
 
-	def evaluation(self, X, y, verbose=0):
-		score = self.evaluate(X, y, verbose=verbose)
-		return score
-
-	def validation(self, X, y):
-		total = y.size
-		positives = y.sum()
-		negatives = total - positives
-		z = self.predict_classes(X).ravel()
-		TP = sum((y + z) == 2)
-		FP = sum(z == 1) - TP
-		TN = sum((y + z) == 0)
-		FN = sum(z == 0) - TN
-		accuracy = 0.0
-		if positives != 0 and negatives != 0:
-			accuracy = 0.5 * (TP / positives) + 0.5 * (TN / negatives)
-		return {'pred': z, 'tp': TP, 'fp': FP, 'tn': TN, 'fn': FN, 'acc': accuracy}
-
-	def my_validation(self, D, wsize, wover, channel, label_id):
+	def my_validation(self, D, wsize, wover, channels, label_id):
 		# Lists to store the splited windows
 		X_test = list()
 		y_test = list()
@@ -63,8 +50,10 @@ class MLP_NN(kr.models.Sequential):
 		while j < D.index.size:
 			win = D.iloc[i:j]
 			real = 1 if 1 in win[label_id].values else 0
+			x = win[channels].values.T.ravel()
+			x = x.reshape(1, x.size)
 			# Make the prediction
-			pred = self.prediction(np.array([win[channel].values]))[0]
+			pred = (self.predict(x) > 0.5).astype('int32')[0][0]
 			# Store window and its labels
 			X_test.append(win)
 			y_test.append(real)
@@ -91,8 +80,12 @@ class MLP_NN(kr.models.Sequential):
 		accuracy = 0.0
 		if positives != 0 and negatives != 0:
 			accuracy = 0.5 * (TP / positives) + 0.5 * (TN / negatives)
-		return {'X_test': X_test, 'y_test': y_test, 'y_pred': y_pred, 'tp': TP, 'fp': FP, 'tn': TN, 'fn': FN, 'acc': accuracy}
-
-	def prediction(self, X):
-		z = self.predict_classes(X).ravel()
-		return z
+		score = {
+			'X_test': X_test,
+			'y_test': y_test,
+			'y_pred': y_pred,
+			'tp': TP, 'fp': FP,
+			'tn': TN, 'fn': FN,
+			'accuracy': accuracy
+		} 
+		return score

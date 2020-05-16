@@ -1,3 +1,4 @@
+import gc
 import numpy as np
 import pandas as pd
 from eegtools import *
@@ -12,50 +13,53 @@ w0 = 60
 low = 1
 high = 12
 order = 5
-n_channels = 8
-labelID = 'Label'
 
 # Data loading
 D = pd.read_csv('../../../../Desktop/Sessions/Julio-Flores-23-Male_2020-02-12_1_Label.csv')
+
 channel_names = D.columns[:-1]
+total_channels = channel_names.size
+label_id = D.columns[-1]
 
 # Apply filters
-notch(D, fs, w0, n_channels)
-bandpass(D, fs, low, high, order, n_channels)
+notch(D, fs, w0, total_channels)
+bandpass(D, fs, low, high, order, total_channels)
 
 # Normalization
 D[channel_names] = MinMaxScaler().fit_transform(D[channel_names])
 
-# Total of events
-event_index = D[D[labelID] == 1].index
+# Split data into training and validation
+D_train, D_test = split_training_validation(D, label_id, 0.3)
 
-# Total of samples
-signal_size = D.index.size
+# Free original dataframe
+del D
+gc.collect()
 
 # Custom fitness function
-def my_fitness(phenotype):
+def my_fitness(phenotype, epochs=32):
 	# Copy original data to modify its labels
-	X = D.copy()
+	X = D_train.copy()
 	# Window segmentation vars
 	wsize = phenotype[0]
 	wover = phenotype[1]
-	wstep = phenotype[2]
-	wpadding = phenotype[3]
+	wpadd = phenotype[2]
+	wstep = phenotype[3]
+	# Channel list
+	channels = [channel_names[i] for i in range(total_channels) if phenotype[i + 4] == 1]
+	selected_channels = len(channels)
+	# If channel list is empty, acurracy is zero
+	if total_channels == 0:
+		return 0.0
 	# Variables to perform a custom validation
 	wover_val = int(round(wover * wsize))
-	param = {'wsize': wsize, 'wover': wover_val, 'label': labelID, 'channel': '1'}
 	# Window segmentation (Training)
-	X_train, y_train = extract_windows(X, wsize, labelID, wover, True, wstep, wpadding)
+	X_train, y_train = extract_windows(X, wsize, label_id, wover, True, wpadd, wstep)
 	# Map list of DataFrame to numpy arrays
-	X_train = np.array([win[param['channel']].values for win in X_train])
+	X_train = np.array([win[channels].values.T.ravel() for win in X_train])
 	y_train = np.array(y_train)
 	# Neural network structure
-	input_dim = wsize
+	input_dim = X_train[0].size
 	output_dim = 1
-	# # One hidden layer
-	# hidden_1 = int((input_dim * output_dim) ** (1 / 2))
-	# layer = [hidden_1, output_dim]
-	# activation = ['relu', 'sigmoid']
 	# Two hidden layers
 	ratio_io = int((input_dim / output_dim) ** (1 / 3))
 	hidden_1 = output_dim * (ratio_io ** 2)
@@ -69,9 +73,10 @@ def my_fitness(phenotype):
 	# Neural network setup
 	net = MLP_NN()
 	net.build(input_dim, layer, activation, optimizer, loss, metrics)
-	net.training(X_train, y_train, val_size=0.3, epochs=100)
-	score = net.my_validation(D, param)
-	return score['acc']
+	net.train(X_train, y_train, val_size=0.3, epochs=epochs, verbose=0)
+	score = net.my_validation(D_test, wsize, wover, channels, label_id)
+	accuracy = 0.8 * score['accuracy'] + 0.2 * (1 - selected_channels / total_channels)
+	return accuracy
 
 # Sphere function for testing
 sphere = lambda phenotype: sum(x ** 2 for x in phenotype)
@@ -81,17 +86,32 @@ sphere = lambda phenotype: sum(x ** 2 for x in phenotype)
 # - window overlap
 # - window step for resampling
 # - window padding for resampling
-# - low cut Hz
-# - high cut Hz
+# - list of channels
 
 # Genetic algorithm setup
-# alg = GeneticAlgorithm(2, 0, mutpb=-1, minmax='max', seed=0)
-# alg.add_variable('wsize', bounds=(50, 250), precision=0)
-# alg.add_variable('wover', bounds=(0.1, 0.9), precision=2)
-# alg.add_variable('wstep', bounds=(0.1, 0.9), precision=1)
-# alg.add_variable('wpadding', bounds=(0.1, 0.9), precision=1)
-# alg.set_fitness_func(my_fitness)
-# gbest, seed = alg.execute()
-# print('Seed:', seed)
+def run_ga():
+	alg = GeneticAlgorithm(20, 30, mutpb=-1, minmax='max', seed=None)
+	alg.add_variable('wsize', bounds=(50, 250), precision=0)
+	alg.add_variable('wover', bounds=(0.1, 0.9), precision=2)
+	alg.add_variable('wpadd', bounds=(0.1, 0.9), precision=1)
+	alg.add_variable('wstep', bounds=(0.1, 0.9), precision=1)
+	for name in channel_names:
+		alg.add_variable(name, bounds=(0, 1), precision=0)
+	alg.set_fitness_func(my_fitness)
+	gbest, seed = alg.execute()
+	print('Seed: {}'.format(seed))
 
-print(my_fitness([50, 0.33, 0.1, 0.1]))
+# Epoch sintonization
+def run_epoch():
+	for i in range(31):
+		for e in [8, 16, 32, 64, 128]:
+			print(my_fitness([51, 0.33, 0.1, 0.1, 1, 1, 1, 1, 1, 1, 1, 1], e), end=',')
+		print()
+
+# Test specific cases
+def run_case():
+	for i in range(31):
+		print(my_fitness([66, 0.39, 0.1, 0.2, 0, 1, 0, 0, 0, 0, 0, 0]), end=',')
+		print(my_fitness([66, 0.39, 0.1, 0.2, 0, 1, 0, 0, 0, 1, 0, 0]))
+
+run_ga()

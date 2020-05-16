@@ -1,7 +1,7 @@
 from scipy.signal import iirnotch, filtfilt, butter
 
 # Function to split EEG (Pandas DataFrame) into windows
-def extract_windows(D, wsize, label_id, wover=0.0, fixed=False, step=0.0, padding=0.0):
+def extract_windows(D, wsize, label_id, wover=0.0, fixed=False, padding=0.0, step=0.0):
 	# Half and remainder of a windowx
 	half = wsize // 2
 	remainder = wsize % 2
@@ -66,11 +66,18 @@ def balance_dataset(X, y):
 	index = np.concatenate((pos, fill), axis=0)
 	return (X[index], y[index])
 
-def split_validation_dataset(D, validation_split):
+# Split an EEG based on a number (%) of events
+def split_training_validation(D, label_id, validation_split):
 	label = D[label_id]
 	index = label[label == 1].index
-	total_events = int(round(index.size * validation_split))
-	
+	validation_events = int(round(index.size * validation_split))
+	training_events = index.size - validation_events
+	a, b = index[training_events - 1], index[training_events]
+	offset = (b - a) // 2
+	cut_point = a + offset
+	X_train = D.iloc[:cut_point]
+	X_test = D.iloc[cut_point:]
+	return (X_train, X_test)
 
 # Notch filter for EEG DataFrame
 def notch(D, fs, w0, n_cols, Q=30.0):

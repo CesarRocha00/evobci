@@ -525,7 +525,7 @@ class EEGRecorder(QMainWindow):
 	"""docstring for EEGRecorder"""
 	def __init__(self):
 		super(EEGRecorder, self).__init__()
-		self.setWindowTitle('EEG Recorder')
+		self.setWindowTitle('EEG Recorder v2.0')
 		self.setWindowIcon(QIcon('./icons/record.png'))
 		self.resize(480,640)
 		self.setContentsMargins(10, 10, 10, 10)
@@ -689,11 +689,11 @@ class EEGRecorder(QMainWindow):
 		self.statusBar.showMessage('Video file saved as {}'.format(videoFullPath))
 
 
-class EEGLabeling(QMainWindow):
-	"""docstring for EEGLabeling"""
+class EEGStudio(QMainWindow):
+	"""docstring for EEGStudio"""
 	def __init__(self):
-		super(EEGLabeling, self).__init__()
-		self.setWindowTitle('EEG Labeling')
+		super(EEGStudio, self).__init__()
+		self.setWindowTitle('EEG Studio v1.0')
 		self.setContentsMargins(10, 10, 10, 10)
 		# Variables
 		self.D = None
@@ -948,11 +948,11 @@ class EEGLabeling(QMainWindow):
 		self.statusBar.showMessage('Labeled EEG file saved as {}'.format(path))
 
 
-class BCIVisualizer(QMainWindow):
-	"""docstring for BCIVisualizer"""
+class BCISimulator(QMainWindow):
+	"""docstring for BCISimulator"""
 	def __init__(self):
-		super(BCIVisualizer, self).__init__()
-		self.setWindowTitle('BCI Visualizer')
+		super(BCISimulator, self).__init__()
+		self.setWindowTitle('BCI Simulator v2.0')
 		self.resize(1280, 720)
 		self.setContentsMargins(10, 0, 10, 10)
 		self.label_id = ''

@@ -1,4 +1,3 @@
-import sys
 import math
 import numpy as np
 import operator as op
@@ -60,10 +59,6 @@ class GeneticAlgorithm(object):
 		self.reverse = False if minmax == 'min' else True
 		self.seed = seed if seed is not None and seed >= 0 else np.random.randint(10000000)
 		np.random.seed(self.seed)
-
-	def set_variable_conf(self, conf):
-		for var in conf:
-			self.add_variable(var['name'], var['bounds'], var['precision'])
 
 	def add_variable(self, name, bounds=(0, 0), precision=0):
 		self.variable_conf[name] = {'bounds': bounds, 'precision': precision}
@@ -219,9 +214,3 @@ class GeneticAlgorithm(object):
 		ind_avg = duration / (self.pop_size * (self.n_generations + 1))
 		print('Elapsed time: {} sec\nAverage per generation: {} sec\nAverage per individual: {} sec'.format(duration, gen_avg, ind_avg))
 		return (gbest, self.seed)
-
-	def print_ind(self, ind):
-		print(np.array(ind.genotype).ravel(), sep='')
-		for i in range(self.n_vars):
-			print('\tx{}: {}'.format(i + 1, ind.phenotype[i]), sep='')
-		print('\tf(x): {}'.format(ind.fitness))
