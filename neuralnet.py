@@ -33,6 +33,10 @@ class MLP_NN(kr.models.Sequential):
 			history = self.fit(X, y, epochs=epochs, validation_split=val_size, shuffle=True, verbose=verbose)
 		return history
 
+	def prediction(self, X):
+		pred = (self.predict(X) > 0.5).astype('int32').ravel()
+		return pred
+
 	def my_validation(self, D, wsize, wover, channels, label_id):
 		# Lists to store the splited windows
 		X_test = list()
@@ -53,7 +57,7 @@ class MLP_NN(kr.models.Sequential):
 			x = win[channels].values.T.ravel()
 			x = x.reshape(1, x.size)
 			# Make the prediction
-			pred = (self.predict(x) > 0.5).astype('int32')[0][0]
+			pred = self.prediction(x)[0]
 			# Store window and its labels
 			X_test.append(win)
 			y_test.append(real)

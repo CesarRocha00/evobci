@@ -53,7 +53,7 @@ def my_fitness(phenotype, epochs=32):
 	# Variables to perform a custom validation
 	wover_val = int(round(wover * wsize))
 	# Window segmentation (Training)
-	X_train, y_train = extract_windows(X, wsize, label_id, wover, True, wpadd, wstep)
+	X_train, y_train = extract_windows(X, wsize, wover, label_id, True, wpadd, wstep)
 	# Map list of DataFrame to numpy arrays
 	X_train = np.array([win[channels].values.T.ravel() for win in X_train])
 	y_train = np.array(y_train)

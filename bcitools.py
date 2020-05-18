@@ -84,7 +84,7 @@ class FilteringForm(QGroupBox):
 	"""docstring for FilteringForm"""
 
 	content = ['250','60','1','12','5','8']
-	fields = ['fs','notch','low','high','order','channels']
+	fields = ['fs','notch','low','high','order','n_channels']
 	labels = ['Fs (Hz)','Notch (Hz)','Low Cut (Hz)','Hight Cut (Hz)','Order', 'Num. Channels']
 
 	def __init__(self, title=None, flat=False):
@@ -882,7 +882,7 @@ class EEGStudio(QMainWindow):
 		param = self.filteringForm.getValues()
 		channel = self.channelPanel.getChecked()
 		color = self.channelPanel.getColors()
-		numCh = param['channels']
+		numCh = param['n_channels']
 		self.fs = param['fs']
 		notch(self.X, self.fs, param['notch'], numCh)
 		bandpass(self.X, self.fs, param['low'], param['high'], param['order'], numCh)
@@ -959,7 +959,6 @@ class BCISimulator(QMainWindow):
 		# Variables
 		self.T = None
 		self.V = None
-		self.X = None
 		self.T_tmp = None
 		self.V_tmp = None
 		self.X_train = None
@@ -979,8 +978,8 @@ class BCISimulator(QMainWindow):
 		self.rightFileDialog = FilePathDialog('V. EEG file:', 'Open file', 'EEG files (*.csv)')
 		self.channelPanel = CheckBoxPanel(title='Channels')
 		self.filteringForm = FilteringForm(title='Filtering')
-		self.validationPanel = RadioButtonPanel(title='Action to execute')
-		self.validationPanel.setOptions(['Validation', 'Prediction'])
+		self.actionPanel = RadioButtonPanel(title='Action')
+		self.actionPanel.setOptions(['Validation', 'Prediction'])
 		# Threads
 		self.plotViewer['left'] = EEGViewer(mode='single')
 		self.plotViewer['right'] = EEGViewer(mode='single')
@@ -1010,6 +1009,8 @@ class BCISimulator(QMainWindow):
 		self.wstepEdit.setAlignment(Qt.AlignCenter)
 		self.wpaddEdit = QLineEdit('0.0')
 		self.wpaddEdit.setAlignment(Qt.AlignCenter)
+		self.epochEdit = QLineEdit('10')
+		self.epochEdit.setAlignment(Qt.AlignCenter)
 		self.statsEdit = QPlainTextEdit()
 		# Checkboxes
 		self.fixedCheck = QCheckBox('Fixed')
@@ -1042,6 +1043,8 @@ class BCISimulator(QMainWindow):
 		# GroupBoxes
 		windowGBox = QGroupBox('Window')
 		windowGBox.setAlignment(Qt.AlignCenter)
+		trainingGBox = QGroupBox('Training')
+		trainingGBox.setAlignment(Qt.AlignCenter)
 		# Layouts
 		leftInfoLayout = QHBoxLayout()
 		leftInfoLayout.addWidget(self.leftRealLabel, alignment=Qt.AlignLeft)
@@ -1088,22 +1091,33 @@ class BCISimulator(QMainWindow):
 		windowLayout.addWidget(QLabel('Overlap (%)'), 0, 1, alignment=Qt.AlignCenter)
 		windowLayout.addWidget(self.woverEdit, 1, 1, alignment=Qt.AlignCenter)
 		windowLayout.addWidget(self.fixedCheck, 0, 2, 2, 1, alignment=Qt.AlignCenter)
-		windowLayout.addWidget(QLabel('Step (%)'), 0, 3, alignment=Qt.AlignCenter)
-		windowLayout.addWidget(self.wstepEdit, 1, 3, alignment=Qt.AlignCenter)
-		windowLayout.addWidget(QLabel('Padding (%)'), 0, 4, alignment=Qt.AlignCenter)
-		windowLayout.addWidget(self.wpaddEdit, 1, 4, alignment=Qt.AlignCenter)
+		windowLayout.addWidget(QLabel('Padding (%)'), 0, 3, alignment=Qt.AlignCenter)
+		windowLayout.addWidget(self.wpaddEdit, 1, 3, alignment=Qt.AlignCenter)
+		windowLayout.addWidget(QLabel('Step (%)'), 0, 4, alignment=Qt.AlignCenter)
+		windowLayout.addWidget(self.wstepEdit, 1, 4, alignment=Qt.AlignCenter)
 		windowGBox.setLayout(windowLayout)
+
+		trainingLayout = QGridLayout()
+		trainingLayout.addWidget(QLabel('Epochs'), 0, 0, alignment=Qt.AlignCenter)
+		trainingLayout.addWidget(self.epochEdit, 1, 0, alignment=Qt.AlignCenter)
+		trainingGBox.setLayout(trainingLayout)
 
 		paramsLayout = QHBoxLayout()
 		paramsLayout.addWidget(self.filteringForm, 6)
 		paramsLayout.addWidget(windowGBox, 5)
-		paramsLayout.addWidget(self.validationPanel, 2)
+		paramsLayout.addWidget(trainingGBox, 1)
+
+		actionLayout = QHBoxLayout()
+		actionLayout.addStretch()
+		actionLayout.addWidget(self.actionPanel, alignment=Qt.AlignCenter)
+		actionLayout.addWidget(self.applyButton, alignment=Qt.AlignCenter)
+		actionLayout.addStretch()
 
 		mainLayout = QVBoxLayout()
 		mainLayout.addLayout(viewLayout)
 		mainLayout.addWidget(self.channelPanel)
 		mainLayout.addLayout(paramsLayout)
-		mainLayout.addWidget(self.applyButton, alignment=Qt.AlignCenter)
+		mainLayout.addLayout(actionLayout)
 		mainLayout.addWidget(self.runButton, alignment=Qt.AlignCenter)
 		# Main widget
 		mainWidget = QWidget()
@@ -1137,42 +1151,44 @@ class BCISimulator(QMainWindow):
 
 	def createChannelWidgets(self):
 		self.label_id = self.T.columns[-1]
-		columns = self.T.columns[:-1]
-		self.channelPanel.setOptions(columns)
+		column_names = self.T.columns[:-1]
+		self.channelPanel.setOptions(column_names)
 
 	def applyParameters(self):
-		channels = self.channelPanel.getChecked()
-		if len(channels) == 0:
+		selected_channels = self.channelPanel.getChecked()
+		if len(selected_channels) == 0:
 			self.statusBar.showMessage('You must select at least one channel!')
 			return
 		# Data backup and preprocesing
 		filters = self.filteringForm.getValues()
 		# Training
 		if self.T is not None:
-			self.T_tmp = self.applyFilters(self.T, filters, channels)
+			self.T_tmp = self.applyFilters(self.T, filters, selected_channels)
 		else:
 			self.statusBar.showMessage('Training EEG file was not loaded correctly! Try again.')
 			return
 		# Validation
 		if self.V is not None:
-			self.V_tmp = self.applyFilters(self.V, filters, channels)
+			self.V_tmp = self.applyFilters(self.V, filters, selected_channels)
 		# Window parameters
-		self.param['channel'] = channels[0]
 		self.param['wsize'] = int(self.wsizeEdit.text().strip())
 		self.param['wover'] = float(self.woverEdit.text().strip())
 		self.param['fixed'] = self.fixedCheck.isChecked()
-		self.param['wstep'] = float(self.wstepEdit.text().strip())
 		self.param['wpadd'] = float(self.wpaddEdit.text().strip())
+		self.param['wstep'] = float(self.wstepEdit.text().strip())
 		self.param['label'] = self.label_id
+		self.param['channels'] = selected_channels
+		# Training parameters
+		self.param['epochs'] = int(self.epochEdit.text().strip())
 		# Reset labels and counters
 		self.resetStates()
 		# Now try to create the traininig and testing datasets
-		self.createDatasets(channels)
+		self.createDatasets(selected_channels)
 
 	def applyFilters(self, D, filters, channels):
 		C = D.copy()
-		notch(C, filters['fs'], filters['notch'], filters['channels'])
-		bandpass(C, filters['fs'], filters['low'], filters['high'], filters['order'], filters['channels'])
+		notch(C, filters['fs'], filters['notch'], filters['n_channels'])
+		bandpass(C, filters['fs'], filters['low'], filters['high'], filters['order'], filters['n_channels'])
 		C[channels] = MinMaxScaler().fit_transform(C[channels])
 		# Remove non selected channels
 		if self.label_id in C.columns:	
@@ -1185,38 +1201,33 @@ class BCISimulator(QMainWindow):
 
 	def createDatasets(self, channels):
 		colors = self.channelPanel.getColors()
-		valType = self.validationPanel.getChecked()
+		self.action = self.actionPanel.getChecked()
 		# Verify if fixed windows will be used
-		if self.param['fixed']:
-			maxWsize = max_window_size(self.T_tmp, self.label_id)
-			if self.param['wsize'] > maxWsize:
-				self.statusBar.showMessage('There are some fixed windows overlaped. Check the window size.')
-		self.T_tmp, self.y_train = extract_windows(self.T_tmp, self.param['wsize'], self.label_id, self.param['wover'], self.param['fixed'], self.param['wstep'], self.param['wpadd'])
-		# Check validation type to create training and testing dataset 
-		if valType == 'Validation' and self.V is not None and self.label_id in self.V.columns:
-			# Copy for custom validation
-			self.X = self.V_tmp.copy()
-			self.V_tmp, self.y_test = extract_windows(self.V_tmp, self.param['wsize'], self.label_id, self.param['wover'], False, 0.0, 0.0)
-			self.action = valType
-		elif valType == 'Prediction' and self.V is not None:
-			self.V_tmp, self.y_test = extract_windows(self.V_tmp, self.param['wsize'], self.label_id, self.param['wover'], False, 0.0, 0.0)
-			self.action = valType
-		else:
-			# self.T_tmp, self.V_tmp, self.y_train, self.y_test = train_test_split(self.T_tmp, self.y_train, test_size=0.3)
-			self.statusBar.showMessage('There was an error with {} EEG file.'.format(valType))
-			return
+		maxWsize = max_window_size(self.T_tmp, self.label_id)
+		if self.param['fixed'] and self.param['wsize'] > maxWsize:
+			self.statusBar.showMessage('There are some fixed windows overlaped. Check the window size.')
+		# Split training data into windows
+		self.T_tmp, self.y_train = extract_windows(self.T_tmp, self.param['wsize'], self.param['wover'], self.label_id, self.param['fixed'], self.param['wpadd'], self.param['wstep'])
 		# Map lists of windows to numpy arrays
-		self.X_train = np.array([win[channels[0]].values for win in self.T_tmp])
+		self.X_train = np.array([win[channels].values.T.ravel() for win in self.T_tmp])
 		self.y_train = np.array(self.y_train)
-		self.X_test = np.array([win[channels[0]].values for win in self.V_tmp])
-		self.y_test = np.array(self.y_test)
+		# Check validation type to create testing dataset 
+		if self.action == 'Prediction' and self.V is not None:
+			# Split validation data into windows
+			self.V_tmp, self.y_test = extract_windows(self.V_tmp, self.param['wsize'], self.param['wover'], None, False, 0.0, 0.0)
+			# Map lists of windows to numpy arrays
+			self.X_test = np.array([win[channels].values.T.ravel() for win in self.V_tmp])
+			self.y_test = np.array(self.y_test)
+		else:
+			# Add validation for label_id existence in Validation file
+			pass
 		# Message of dataset creation
 		self.statusBar.showMessage('Datasets are ready!')
 		# EEG viewer setup
 		self.plotViewer['left'].configure(channels, colors, self.param['wsize'])
 		self.plotViewer['right'].configure(channels, colors, self.param['wsize'])
 		# Set plot counter
-		self.plotTotal['left'] = len(self.X_train)
+		self.plotTotal['left'] = len(self.T_tmp)
 		# Plot first training window
 		self.updatePlot('left', 1)
 		# Activate run button
@@ -1225,41 +1236,40 @@ class BCISimulator(QMainWindow):
 	def runExperiment(self):
 		neuralnet = MLP_NN()
 		# Input and output dimension
-		input_dim = self.param['wsize']
+		input_dim = self.X_train[0].size
 		output_dim = 1
-		# Ratio for pyramid shape in hidden layers
+		# Two hidden layers
 		ratio_io = int((input_dim / output_dim) ** (1 / 3))
-		# Hidden layer dimension
 		hidden_1 = output_dim * (ratio_io ** 2)
 		hidden_2 = output_dim * ratio_io
-		# Layer configuration
 		layer = [hidden_1, hidden_2, output_dim]
-		# Activation functions for each layer
 		activation = ['relu', 'relu', 'sigmoid']
-		# Optimizer for learning
+		# Optimizer and metrics
 		optimizer = 'adam'
-		# Loss function for learning
 		loss = 'mean_squared_error'
-		# Required metrics
 		metrics = ['accuracy']
 		self.statusBar.showMessage('Building neural network...')
+		# Configure neural network
 		neuralnet.build(input_dim, layer, activation, optimizer, loss, metrics)
 		self.statusBar.showMessage('Running training phase...')
-		neuralnet.training(self.X_train, self.y_train, val_size=0.3, epochs=100)
+		# Perform the training
+		neuralnet.train(self.X_train, self.y_train, val_size=0.3, epochs=self.param['epochs'], verbose=0)
 		# Get results
 		if self.action == 'Prediction':
 			score = neuralnet.prediction(self.X_test)
 			self.y_pred = score
 			self.updateStats(score, 'prediction')
 		else:
-			score = neuralnet.my_validation(self.X, self.param['wsize'], self.param['wover'], self.param['channel'], self.label_id)
+			score = neuralnet.my_validation(self.V_tmp, self.param['wsize'], self.param['wover'], self.param['channels'], self.label_id)
 			self.V_tmp, self.y_test, self.y_pred = score['X_test'], score['y_test'], score['y_pred']
 			self.updateStats(score, 'validation')
 		self.statusBar.showMessage('Neural network has finished!')
 		# Set plot counter
-		self.plotTotal['right'] = len(self.X_test)
+		self.plotTotal['right'] = len(self.V_tmp)
 		# Plot first testing window
 		self.updatePlot('right', 1)
+		# Deactivate run button
+		self.runButton.setEnabled(False)
 
 	def updatePlot(self, side, val):
 		if (self.plotIndex[side] + val) >= 0 and (self.plotIndex[side] + val) < self.plotTotal[side]:
@@ -1277,7 +1287,8 @@ class BCISimulator(QMainWindow):
 			self.leftRealLabel.setPixmap(pixReal)
 		else:
 			pixReal = self.pixmap['gray']['real']
-			if len(self.y_test) > 0: pixReal = self.pixmap[color[self.y_test[self.plotIndex[side]]]]['real']
+			if len(self.y_test) > 0:
+				pixReal = self.pixmap[color[self.y_test[self.plotIndex[side]]]]['real']
 			pixPred = self.pixmap[color[self.y_pred[self.plotIndex[side]]]]['pred']
 			self.rightRealLabel.setPixmap(pixReal)
 			self.rightPredLabel.setPixmap(pixPred)
@@ -1289,7 +1300,7 @@ class BCISimulator(QMainWindow):
 			summary = 'VALIDATION\n'
 			summary += '-> TP: {}\n-> FP: {}\n'.format(score['tp'], score['fp'])
 			summary += '-> TN: {}\n-> FN: {}\n'.format(score['tn'], score['fn'])
-			summary += '-> Accuracy: {}\n'.format(round(score['acc'], 5))
+			summary += '-> Accuracy: {}\n'.format(round(score['accuracy'], 5))
 			self.statsEdit.insertPlainText(summary)
 		else:
 			positives = score.sum()

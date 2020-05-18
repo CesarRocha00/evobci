@@ -1,7 +1,7 @@
 from scipy.signal import iirnotch, filtfilt, butter
 
 # Function to split EEG (Pandas DataFrame) into windows
-def extract_windows(D, wsize, label_id, wover=0.0, fixed=False, padding=0.0, step=0.0):
+def extract_windows(D, wsize, wover=0.0, label_id=None, fixed=False, padding=0.0, step=0.0):
 	# Half and remainder of a windowx
 	half = wsize // 2
 	remainder = wsize % 2
@@ -13,7 +13,7 @@ def extract_windows(D, wsize, label_id, wover=0.0, fixed=False, padding=0.0, ste
 	step_val = int(round(step * wsize)) if resampling else wsize
 	# Lists to store the windows
 	X, y = list(), list()
-	_X, _y = None, None
+	_X, _y = list(), list()
 	# Check for event (label) existence if fixed windows are required
 	while fixed and 1 in D[label_id].values:
 		# Get event index
@@ -36,7 +36,8 @@ def extract_windows(D, wsize, label_id, wover=0.0, fixed=False, padding=0.0, ste
 	step_val = wsize - wover_val
 	# Window extraction
 	_X = [D.iloc[i:i + wsize] for i in range(0, stop, step_val)]
-	_y = [1 if 1 in window[label_id].values else 0 for window in _X]
+	if label_id is not None:
+		_y = [1 if 1 in window[label_id].values else 0 for window in _X]
 	X.extend(_X)
 	y.extend(_y)
 	# Return list of windows and classes
