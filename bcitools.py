@@ -830,7 +830,6 @@ class EEGStudio(QMainWindow):
 		self.statusBar.showMessage('Error: {}'.format(self.player.errorString()))
 
 	def setPosition(self, position):
-		print('SetPos')
 		if self.player.isVideoAvailable():
 			self.player.setPosition(position)
 			self.findIndex()
@@ -934,10 +933,13 @@ class EEGStudio(QMainWindow):
 
 	def addLabel(self):
 		position = int(self.indexEdit.text().strip())
-		self.eegViewer.addMark(position)
-		self.label[position] = 1
-		self.indexEdit.setText('')
-		self.playButton.setFocus()
+		if position < 0 or position > self.D.index.size:
+			self.statusBar.showMessage('Index {} does not exist!'.format(position))
+		else:
+			self.eegViewer.addMark(position)
+			self.label[position] = 1
+			self.indexEdit.setText('')
+			self.playButton.setFocus()
 
 	def saveLabels(self):
 		self.D['Label'] = self.label
