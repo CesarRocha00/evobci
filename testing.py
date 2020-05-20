@@ -15,30 +15,35 @@ high = 12
 order = 5
 
 # Data loading
-D = pd.read_csv('../../../../Desktop/Sessions/Julio-Flores-23-Male_2020-02-12_1_Label.csv')
+T = pd.read_csv('../../../../Desktop/Sessions/Nallely-Ramos-25-Female_2020-03-27_1_Label.csv')
+V = pd.read_csv('../../../../Desktop/Sessions/Nallely-Ramos-25-Female_2020-03-27_2_Label.csv')
 
-channel_names = D.columns[:-1]
+# Get some info
+channel_names = T.columns[:-1]
 total_channels = channel_names.size
-label_id = D.columns[-1]
+label_id = T.columns[-1]
 
 # Apply filters
-notch(D, fs, w0, total_channels)
-bandpass(D, fs, low, high, order, total_channels)
+notch(T, fs, w0, total_channels)
+bandpass(T, fs, low, high, order, total_channels)
+notch(V, fs, w0, total_channels)
+bandpass(V, fs, low, high, order, total_channels)
 
 # Normalization
-D[channel_names] = MinMaxScaler().fit_transform(D[channel_names])
+T[channel_names] = MinMaxScaler().fit_transform(T[channel_names])
+V[channel_names] = MinMaxScaler().fit_transform(V[channel_names])
 
 # Split data into training and validation
-D_train, D_test = split_training_validation(D, label_id, 0.3)
+# D_train, D_test = split_training_validation(D, label_id, 0.3)
 
 # Free original dataframe
-del D
-gc.collect()
+# del D
+# gc.collect()
 
 # Custom fitness function
 def my_fitness(phenotype, epochs=32):
 	# Copy original data to modify its labels
-	X = D_train.copy()
+	X = T.copy()
 	# Window segmentation vars
 	wsize = phenotype[0]
 	wover = phenotype[1]
@@ -74,7 +79,7 @@ def my_fitness(phenotype, epochs=32):
 	net = MLP_NN()
 	net.build(input_dim, layer, activation, optimizer, loss, metrics)
 	net.train(X_train, y_train, val_size=0.3, epochs=epochs, verbose=0)
-	score = net.my_validation(D_test, wsize, wover, channels, label_id)
+	score = net.my_validation(V, wsize, wover, channels, label_id)
 	accuracy = 0.8 * score['accuracy'] + 0.2 * (1 - selected_channels / total_channels)
 	return accuracy
 
