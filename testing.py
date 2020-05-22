@@ -1,9 +1,7 @@
-import gc
 import numpy as np
 import pandas as pd
 from eegtools import *
 from neuralnet import MLP_NN
-from datetime import datetime
 from evolalgo import GeneticAlgorithm
 from sklearn.preprocessing import MinMaxScaler
 
@@ -15,35 +13,35 @@ high = 12
 order = 5
 
 # Data loading
-T = pd.read_csv('../../../../Desktop/Sessions/Nallely-Ramos-25-Female_2020-03-27_1_Label.csv')
-V = pd.read_csv('../../../../Desktop/Sessions/Nallely-Ramos-25-Female_2020-03-27_2_Label.csv')
+D_train = pd.read_csv(sys.argv[1])
+D_valid = pd.read_csv(sys.argv[2])
 
 # Get some info
-channel_names = T.columns[:-1]
+channel_names = D_train.columns[:-1]
 total_channels = channel_names.size
-label_id = T.columns[-1]
+label_id = D_train.columns[-1]
 
 # Apply filters
-notch(T, fs, w0, total_channels)
-bandpass(T, fs, low, high, order, total_channels)
-notch(V, fs, w0, total_channels)
-bandpass(V, fs, low, high, order, total_channels)
+notch(D_train, fs, w0, total_channels)
+bandpass(D_train, fs, low, high, order, total_channels)
+notch(D_valid, fs, w0, total_channels)
+bandpass(D_valid, fs, low, high, order, total_channels)
 
 # Normalization
-T[channel_names] = MinMaxScaler().fit_transform(T[channel_names])
-V[channel_names] = MinMaxScaler().fit_transform(V[channel_names])
+D_train[channel_names] = MinMaxScaler().fit_transform(D_train[channel_names])
+D_valid[channel_names] = MinMaxScaler().fit_transform(D_valid[channel_names])
 
 # Split data into training and validation
-# D_train, D_test = split_training_validation(D, label_id, 0.3)
+D_train, D_optim = split_training_validation(D_train, label_id, 0.7)
 
-# Free original dataframe
-# del D
-# gc.collect()
+# Variable to check the best accuracy and save the model
+gbest_acc = 0.0
 
 # Custom fitness function
-def my_fitness(phenotype, epochs=32):
+def my_fitness(phenotype, epochs=10):
+	global gbest_acc
 	# Copy original data to modify its labels
-	X = T.copy()
+	X_train = D_train.copy()
 	# Window segmentation vars
 	wsize = phenotype[0]
 	wover = phenotype[1]
@@ -58,7 +56,7 @@ def my_fitness(phenotype, epochs=32):
 	# Variables to perform a custom validation
 	wover_val = int(round(wover * wsize))
 	# Window segmentation (Training)
-	X_train, y_train = extract_windows(X, wsize, wover, label_id, True, wpadd, wstep)
+	X_train, y_train = extract_windows(X_train, wsize, wover, label_id, True, wpadd, wstep)
 	# Map list of DataFrame to numpy arrays
 	X_train = np.array([win[channels].values.T.ravel() for win in X_train])
 	y_train = np.array(y_train)
@@ -73,14 +71,21 @@ def my_fitness(phenotype, epochs=32):
 	activation = ['relu', 'relu', 'sigmoid']
 	# Optimizer and metrics
 	optimizer = 'adam'
-	loss = 'mean_squared_error'
+	loss = 'mse'
 	metrics = ['accuracy']
 	# Neural network setup
-	net = MLP_NN()
-	net.build(input_dim, layer, activation, optimizer, loss, metrics)
-	net.train(X_train, y_train, val_size=0.3, epochs=epochs, verbose=0)
-	score = net.my_validation(V, wsize, wover, channels, label_id)
-	accuracy = 0.8 * score['accuracy'] + 0.2 * (1 - selected_channels / total_channels)
+	model = MLP_NN()
+	model.build(input_dim, layer, activation, optimizer, loss, metrics)
+	model.train(X_train, y_train, val_size=0.3, epochs=epochs, verbose=0)
+	score = model.validation(D_optim, wsize, wover, channels, label_id)
+	# Accuracy type
+	accuracy  = score['accuracy']
+	# accuracy = 0.8 * score['accuracy'] + 0.2 * (1 - selected_channels / total_channels)
+	# Model backup
+	if accuracy > gbest_acc:
+		model.save('./models/best')
+		gbest_acc = accuracy
+	# Return the accuracy as fitness
 	return accuracy
 
 # Sphere function for testing
@@ -105,6 +110,7 @@ def run_ga():
 	alg.set_fitness_func(my_fitness)
 	gbest, seed = alg.execute()
 	print('Seed: {}'.format(seed))
+	return gbest
 
 # Epoch sintonization
 def run_epoch():
@@ -115,8 +121,19 @@ def run_epoch():
 
 # Test specific cases
 def run_case():
-	for i in range(31):
-		print(my_fitness([66, 0.39, 0.1, 0.2, 0, 1, 0, 0, 0, 0, 0, 0]), end=',')
-		print(my_fitness([66, 0.39, 0.1, 0.2, 0, 1, 0, 0, 0, 1, 0, 0]))
+	for i in range(2):
+		print(my_fitness([51, 0.33, 0.1, 0.1, 1, 1, 0, 0, 0, 0, 0, 0], 10))
 
-run_ga()
+# Run GA
+gbest = run_ga()
+# Load the best model
+new_model = MLP_NN()
+new_model.load('./models/best')
+# Get parameters from gbest
+wsize = gbest.phenotype[0]
+wover = gbest.phenotype[1]
+channels = [channel_names[i] for i in range(total_channels) if gbest.phenotype[i + 4] == 1]
+# Perform the validation
+score = new_model.validation(D_valid, wsize, wover, channels, label_id)
+print('GA accuracy:', gbest.fitness)
+print('Verification:', score['accuracy'])

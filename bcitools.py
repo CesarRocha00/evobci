@@ -1236,7 +1236,7 @@ class BCISimulator(QMainWindow):
 		self.runButton.setEnabled(True)
 
 	def runExperiment(self):
-		neuralnet = MLP_NN()
+		model = MLP_NN()
 		# Input and output dimension
 		input_dim = self.X_train[0].size
 		output_dim = 1
@@ -1248,21 +1248,21 @@ class BCISimulator(QMainWindow):
 		activation = ['relu', 'relu', 'sigmoid']
 		# Optimizer and metrics
 		optimizer = 'adam'
-		loss = 'mean_squared_error'
+		loss = 'mse'
 		metrics = ['accuracy']
 		self.statusBar.showMessage('Building neural network...')
 		# Configure neural network
-		neuralnet.build(input_dim, layer, activation, optimizer, loss, metrics)
+		model.build(input_dim, layer, activation, optimizer, loss, metrics)
 		self.statusBar.showMessage('Running training phase...')
 		# Perform the training
-		neuralnet.train(self.X_train, self.y_train, val_size=0.3, epochs=self.param['epochs'], verbose=0)
+		model.train(self.X_train, self.y_train, val_size=0.3, epochs=self.param['epochs'], verbose=0)
 		# Get results
 		if self.action == 'Prediction':
-			score = neuralnet.prediction(self.X_test)
+			score = model.prediction(self.X_test)
 			self.y_pred = score
 			self.updateStats(score, 'prediction')
 		else:
-			score = neuralnet.my_validation(self.V_tmp, self.param['wsize'], self.param['wover'], self.param['channels'], self.label_id)
+			score = model.validation(self.V_tmp, self.param['wsize'], self.param['wover'], self.param['channels'], self.label_id)
 			self.V_tmp, self.y_test, self.y_pred = score['X_test'], score['y_test'], score['y_pred']
 			self.updateStats(score, 'validation')
 		self.statusBar.showMessage('Neural network has finished!')
