@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import pandas as pd
 from eegtools import *
@@ -32,7 +33,7 @@ D_train[channel_names] = MinMaxScaler().fit_transform(D_train[channel_names])
 D_valid[channel_names] = MinMaxScaler().fit_transform(D_valid[channel_names])
 
 # Split data into training and validation
-D_train, D_optim = split_training_validation(D_train, label_id, 0.7)
+# D_train, D_optim = split_training_validation(D_train, label_id, 0.7)
 
 # Variable to check the best accuracy and save the model
 gbest_acc = 0.0
@@ -77,13 +78,13 @@ def my_fitness(phenotype, epochs=10):
 	model = MLP_NN()
 	model.build(input_dim, layer, activation, optimizer, loss, metrics)
 	model.train(X_train, y_train, val_size=0.3, epochs=epochs, verbose=0)
-	score = model.validation(D_optim, wsize, wover, channels, label_id)
+	score = model.validation(D_valid, wsize, wover, channels, label_id)
 	# Accuracy type
 	accuracy  = score['accuracy']
 	# accuracy = 0.8 * score['accuracy'] + 0.2 * (1 - selected_channels / total_channels)
 	# Model backup
 	if accuracy > gbest_acc:
-		model.save('./models/best')
+		model.save(sys.argv[3])
 		gbest_acc = accuracy
 	# Return the accuracy as fitness
 	return accuracy
@@ -100,7 +101,7 @@ sphere = lambda phenotype: sum(x ** 2 for x in phenotype)
 
 # Genetic algorithm setup
 def run_ga():
-	alg = GeneticAlgorithm(20, 30, mutpb=-1, minmax='max', seed=None)
+	alg = GeneticAlgorithm(20, 10, cxpb=0.9, mutpb=-1, minmax='max', seed=None)
 	alg.add_variable('wsize', bounds=(50, 250), precision=0)
 	alg.add_variable('wover', bounds=(0.1, 0.9), precision=2)
 	alg.add_variable('wpadd', bounds=(0.1, 0.9), precision=1)
@@ -112,28 +113,16 @@ def run_ga():
 	print('Seed: {}'.format(seed))
 	return gbest
 
-# Epoch sintonization
-def run_epoch():
-	for i in range(31):
-		for e in [8, 16, 32, 64, 128]:
-			print(my_fitness([51, 0.33, 0.1, 0.1, 1, 1, 1, 1, 1, 1, 1, 1], e), end=',')
-		print()
-
-# Test specific cases
-def run_case():
-	for i in range(2):
-		print(my_fitness([51, 0.33, 0.1, 0.1, 1, 1, 0, 0, 0, 0, 0, 0], 10))
-
 # Run GA
 gbest = run_ga()
-# Load the best model
-new_model = MLP_NN()
-new_model.load('./models/best')
-# Get parameters from gbest
-wsize = gbest.phenotype[0]
-wover = gbest.phenotype[1]
-channels = [channel_names[i] for i in range(total_channels) if gbest.phenotype[i + 4] == 1]
-# Perform the validation
-score = new_model.validation(D_valid, wsize, wover, channels, label_id)
-print('GA accuracy:', gbest.fitness)
-print('Verification:', score['accuracy'])
+# # Load the best model
+# new_model = MLP_NN()
+# new_model.load(sys.argv[3])
+# # Get parameters from gbest
+# wsize = gbest.phenotype[0]
+# wover = gbest.phenotype[1]
+# channels = [channel_names[i] for i in range(total_channels) if gbest.phenotype[i + 4] == 1]
+# # Perform the validation
+# score = new_model.validation(D_valid, wsize, wover, channels, label_id)
+# print('GA accuracy:', gbest.fitness)
+# print('Verification:', score['accuracy'])
