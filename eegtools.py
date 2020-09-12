@@ -5,7 +5,7 @@ def extract_windows(D, wsize, wover=0.0, label_id=None, fixed=False, padding=0.0
 	# Half and remainder of a windowx
 	half = wsize // 2
 	remainder = wsize % 2
-	# Calculate the percentage of variables to samples
+	# Map percentages to samples
 	wover_val = int(round(wover * wsize))
 	padding_val = int(round(padding * wsize))
 	# Check if resampling is required

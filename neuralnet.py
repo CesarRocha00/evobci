@@ -21,16 +21,16 @@ class MLP_NN(object):
 			self.model.add(kr.layers.Dense(layer[i], activation=activation[i]))
 		self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-	def train(self, X, y, val_size=None, epochs=10, verbose=0):
+	def train(self, X, y, val_size=None, epochs=16, verbose=0):
 		history = None
-		device_name = '/device:GPU:0' if tf.test.gpu_device_name() == '/device:GPU:0' else '/device:CPU:0'
-		if verbose > 0:
+		device_name = tf.test.gpu_device_name() if len(tf.config.list_physical_devices('GPU')) > 0 else '/device:CPU:0'
+		if verbose == 0:
 			print('Training with {}'.format(device_name))
 		with tf.device(device_name):
 			history = self.model.fit(X, y, epochs=epochs, validation_split=val_size, shuffle=True, verbose=verbose)
 		return history
 
-	def prediction(self, X):
+	def predict(self, X):
 		pred = (self.model.predict(X) > 0.5).astype('int32').ravel()
 		return pred
 
@@ -54,7 +54,7 @@ class MLP_NN(object):
 			x = win[channels].values.T.ravel()
 			x = x.reshape(1, x.size)
 			# Make the prediction
-			pred = self.prediction(x)[0]
+			pred = self.predict(x)[0]
 			# Store window and its labels
 			X_test.append(win)
 			y_test.append(real)

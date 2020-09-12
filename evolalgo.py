@@ -39,12 +39,13 @@ class Individual(object):
 
 class GeneticAlgorithm(object):
 	"""docstring for GeneticAlgorithm"""
-	def __init__(self, pop_size=2, n_generations=1, cxpb=0.9, n_points=1, mutpb=0.0, minmax='min', seed=None):
+	def __init__(self, pop_size=2, num_gen=1, cxpb=0.9, cxtype='npoint', num_pts=1, mutpb=-1.0, minmax='min', seed=None):
 		super(GeneticAlgorithm, self).__init__()
 		self.pop_size = pop_size
-		self.n_generations = n_generations
+		self.num_gen = num_gen
 		self.cxpb = cxpb
-		self.n_points = n_points
+		self.cxtype = cxtype
+		self.num_pts = num_pts
 		self.mutpb = mutpb
 		self.minmax = minmax
 		self.parents = list()
@@ -52,9 +53,11 @@ class GeneticAlgorithm(object):
 		self.variable_conf = dict()
 		self.variable_names = list()
 		self.variable_bits = list()
-		self.n_vars = 0
+		self.num_vars = 0
 		self.total_bits = 0
 		self.func = None
+		self.crossover_types = {'npoint': self.npoint_crossover, 'binary': self.binary_crossover}
+		self.crossover_ind = self.crossover_types.get(self.cxtype, self.npoint_crossover)
 		self.comp = op.lt if minmax == 'min' else op.gt
 		self.reverse = False if minmax == 'min' else True
 		self.seed = seed if seed is not None and seed >= 0 else np.random.randint(10000000)
@@ -66,12 +69,13 @@ class GeneticAlgorithm(object):
 		bits = bits_4_range(bounds[0], bounds[1], precision)
 		self.variable_bits.append(bits)
 		self.total_bits += bits
-		self.n_vars += 1
+		self.num_vars += 1
 
 	def set_fitness_func(self, func):
 		self.func = func
 
 	def initialize_pop(self):
+		self.population.clear()
 		for i in range(self.pop_size):
 			ind = self.initialize_ind()
 			self.population.append(ind)
@@ -91,7 +95,7 @@ class GeneticAlgorithm(object):
 
 	def decode_ind(self, ind):
 		ind.phenotype.clear()
-		for i in range(self.n_vars):
+		for i in range(self.num_vars):
 			gray = ind.genotype[i]
 			binary = gray_2_binary(gray)
 			decimal = binary_2_decimal(binary)
@@ -132,10 +136,10 @@ class GeneticAlgorithm(object):
 				self.population.append(deepcopy(self.population[idx1]))
 				self.population.append(deepcopy(self.population[idx2]))
 
-	def crossover_ind(self, ind1, ind2):
+	def binary_crossover(self, ind1, ind2):
 		new1 = deepcopy(ind1)
 		new2 = deepcopy(ind2)
-		for i in range(self.n_vars):
+		for i in range(self.num_vars):
 			for j in range(self.variable_bits[i]):
 				swap = np.random.rand() < 0.5
 				new1.genotype[i][j] = ind2.genotype[i][j] if swap else ind1.genotype[i][j]
@@ -143,22 +147,22 @@ class GeneticAlgorithm(object):
 		self.population.append(new1)
 		self.population.append(new2)
 
-	# def crossover_ind(self, ind1, ind2):
-	# 	points = self.select_cx_points(self.n_points)
-	# 	new1 = deepcopy(ind1)
-	# 	new2 = deepcopy(ind2)
-	# 	idx, swap = 0, False
-	# 	for i in range(self.n_vars):
-	# 		for j in range(self.variable_bits[i]):
-	# 			if points[idx]:
-	# 				swap = not swap
-	# 			new1.genotype[i][j] = ind2.genotype[i][j] if swap else ind1.genotype[i][j]
-	# 			new2.genotype[i][j] = ind1.genotype[i][j] if swap else ind2.genotype[i][j]
-	# 			idx += 1
-	# 	self.population.append(new1)
-	# 	self.population.append(new2)
+	def npoint_crossover(self, ind1, ind2):
+		points = self.select_crossover_points(self.num_pts)
+		new1 = deepcopy(ind1)
+		new2 = deepcopy(ind2)
+		idx, swap = 0, False
+		for i in range(self.num_vars):
+			for j in range(self.variable_bits[i]):
+				if points[idx]:
+					swap = not swap
+				new1.genotype[i][j] = ind2.genotype[i][j] if swap else ind1.genotype[i][j]
+				new2.genotype[i][j] = ind1.genotype[i][j] if swap else ind2.genotype[i][j]
+				idx += 1
+		self.population.append(new1)
+		self.population.append(new2)
 
-	def select_cx_points(self, n):
+	def select_crossover_points(self, n):
 		count = 0
 		points = [False] * self.total_bits
 		while count < n:
@@ -173,7 +177,7 @@ class GeneticAlgorithm(object):
 			self.mutation_ind(ind)
 
 	def mutation_ind(self, ind):
-		for i in range(self.n_vars):
+		for i in range(self.num_vars):
 			for j in range(self.variable_bits[i]):
 				if np.random.rand() < self.mutpb:
 					ind.genotype[i][j] = 1 - ind.genotype[i][j]
@@ -196,7 +200,7 @@ class GeneticAlgorithm(object):
 		elapsed = datetime.now() - elapsed
 		duration += elapsed.total_seconds()
 		print('[{}]\tf(x) = {}\t{}\t{} sec'.format(0, gbest.fitness, gbest.phenotype, elapsed.total_seconds()))
-		for i in range(self.n_generations):
+		for i in range(self.num_gen):
 			elapsed = datetime.now()
 			self.tournament_selection()
 			self.crossover_pop()
@@ -210,7 +214,7 @@ class GeneticAlgorithm(object):
 			elapsed = datetime.now() - elapsed
 			duration += elapsed.total_seconds()
 			print('[{}]\tf(x) = {}\t{}\t{} sec'.format(i + 1, gbest.fitness, gbest.phenotype, elapsed.total_seconds()))
-		gen_avg = duration / (self.n_generations + 1)
-		ind_avg = duration / (self.pop_size * (self.n_generations + 1))
+		gen_avg = duration / (self.num_gen + 1)
+		ind_avg = duration / (self.pop_size * (self.num_gen + 1))
 		print('Elapsed time: {} sec\nAverage per generation: {} sec\nAverage per individual: {} sec'.format(duration, gen_avg, ind_avg))
 		return (gbest, self.seed)

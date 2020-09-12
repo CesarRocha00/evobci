@@ -39,7 +39,7 @@ D_valid[channel_names] = MinMaxScaler().fit_transform(D_valid[channel_names])
 gbest_acc = 0.0
 
 # Custom fitness function
-def my_fitness(phenotype, epochs=10):
+def my_fitness(phenotype, epochs=32):
 	global gbest_acc
 	# Copy original data to modify its labels
 	X_train = D_train.copy()
@@ -80,11 +80,11 @@ def my_fitness(phenotype, epochs=10):
 	model.train(X_train, y_train, val_size=0.3, epochs=epochs, verbose=0)
 	score = model.validation(D_valid, wsize, wover, channels, label_id)
 	# Accuracy type
-	accuracy  = score['accuracy']
+	accuracy = score['accuracy']
 	# accuracy = 0.8 * score['accuracy'] + 0.2 * (1 - selected_channels / total_channels)
 	# Model backup
 	if accuracy > gbest_acc:
-		model.save(sys.argv[3])
+		# model.save(sys.argv[3])
 		gbest_acc = accuracy
 	# Return the accuracy as fitness
 	return accuracy
@@ -101,14 +101,14 @@ sphere = lambda phenotype: sum(x ** 2 for x in phenotype)
 
 # Genetic algorithm setup
 def run_ga():
-	alg = GeneticAlgorithm(20, 10, cxpb=0.9, mutpb=-1, minmax='max', seed=None)
+	alg = GeneticAlgorithm(20, 20, cxpb=0.9, cxtype='binary', mutpb=-1, minmax='max', seed=None)
 	alg.add_variable('wsize', bounds=(50, 250), precision=0)
 	alg.add_variable('wover', bounds=(0.1, 0.9), precision=2)
 	alg.add_variable('wpadd', bounds=(0.1, 0.9), precision=1)
 	alg.add_variable('wstep', bounds=(0.1, 0.9), precision=1)
 	for name in channel_names:
 		alg.add_variable(name, bounds=(0, 1), precision=0)
-	alg.set_fitness_func(my_fitness)
+	alg.set_fitness_func(sphere)
 	gbest, seed = alg.execute()
 	print('Seed: {}'.format(seed))
 	return gbest
