@@ -45,7 +45,6 @@ def my_accuracy(y_real, y_pred):
 			FN += 1 if possibleFN and missingTP else 0
 			possibleFN, missingTP = False, True
 	# Stats
-	print(f'Lost: {lost}')
 	positives = TP + FN
 	negatives = TN + FP
 	accuracy = 0.0
@@ -72,8 +71,6 @@ def count_ones(y_list):
 				counters[count] = 1
 			count = 0
 	return counters
-
-
 
 # Custom fitness function
 def my_fitness(phenotype):
@@ -115,39 +112,12 @@ def my_fitness(phenotype):
 	# Neural network setup
 	model = MLP_NN()
 	model.build(input_dim, layer, activation, optimizer, loss, metrics)
-
-	elapsed = datetime.now()
 	history = model.train(X_train, y_train, val_size=0.3, epochs=epochs, verbose=0)
-	elapsed = datetime.now() - elapsed
-	print(f'Training time: {elapsed.total_seconds()}')
-	print()
-	# print(history.history.keys())
-	
-	elapsed = datetime.now()
-	score = model.validation(D_valid, wsize, wover, channels, label_id)
-	elapsed = datetime.now() - elapsed
-	print(f"Accuracy: {score['accuracy']}")
-	print(f"TP: {score['tp']}\tFP: {score['fp']}\tTN: {score['tn']}\tFN: {score['fn']}")
-	print(f"Total: {score['tp'] + score['tn'] + score['fp'] + score['fn']}")
-	print(f"Total events: {sum(score['y_test'])}")
-	print(f"Total predictions: {len(score['y_pred'])}")
-	print(f'Validation time: {elapsed.total_seconds()}')
-	print()
-	
-	elapsed = datetime.now()
 	y_pred = model.predict(X_valid)
 	score = my_accuracy(y_valid, y_pred)
-	elapsed = datetime.now() - elapsed
-	print(f"Accuracy: {score['accuracy']}")
-	print(f"TP: {score['tp']}\tFP: {score['fp']}\tTN: {score['tn']}\tFN: {score['fn']}")
-	print(f"Total: {score['tp'] + score['tn'] + score['fp'] + score['fn']}")
-	print(f"Total events: {sum(y_valid)}")
-	print(f"Fixed events: {count_ones(y_valid)}")
-	print(f"Total predictions: {len(y_pred)}")
-	print(f'Prediction time: {elapsed.total_seconds()}')
-	print()
-
-	model.save('./last_model.h5')
+	accuracy = score['accuracy']
+	return accuracy
+	# model.save('./last_model.h5')
 
 def run_algorithm(kwargs):
 	ga = GeneticAlgorithm(pop_size=kwargs['pop_size'], num_gen=kwargs['num_gen'], cxpb=kwargs['cxpb'], cxtype=kwargs['cxtype'], mutpb=kwargs['mutpb'], minmax='max')
@@ -195,7 +165,8 @@ def data_preprocessing(kwargs):
 def main(**kwargs):
 	# click.echo(kwargs)
 	data_preprocessing(kwargs)
-	my_fitness([71, 0.29, 0.1, 0.1, 1, 1, 0, 1, 1, 1, 0, 0])
+	run_algorithm(kwargs)
+	# my_fitness([71, 0.29, 0.1, 0.1, 1, 1, 0, 1, 1, 1, 0, 0])
 
 if __name__ == '__main__':
 	main()

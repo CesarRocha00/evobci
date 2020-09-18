@@ -51,7 +51,7 @@ class GeneticAlgorithm(object):
 		self.parents = list()
 		self.population = list()
 		self.variable_conf = dict()
-		self.variable_names = list()
+		self.variable_name = list()
 		self.variable_bits = list()
 		self.num_vars = 0
 		self.total_bits = 0
@@ -65,7 +65,7 @@ class GeneticAlgorithm(object):
 
 	def add_variable(self, name, bounds=(0, 0), precision=0):
 		self.variable_conf[name] = {'bounds': bounds, 'precision': precision}
-		self.variable_names.append(name)
+		self.variable_name.append(name)
 		bits = bits_4_range(bounds[0], bounds[1], precision)
 		self.variable_bits.append(bits)
 		self.total_bits += bits
@@ -100,8 +100,8 @@ class GeneticAlgorithm(object):
 			binary = gray_2_binary(gray)
 			decimal = binary_2_decimal(binary)
 			bits = self.variable_bits[i]
-			min_val, max_val = self.variable_conf[self.variable_names[i]]['bounds']
-			precision = self.variable_conf[self.variable_names[i]]['precision']
+			min_val, max_val = self.variable_conf[self.variable_name[i]]['bounds']
+			precision = self.variable_conf[self.variable_name[i]]['precision']
 			value = fit_2_range(decimal, min_val, max_val, bits)
 			value = round(value, precision) if precision > 0 else int(value)
 			ind.phenotype.append(value)
@@ -199,7 +199,8 @@ class GeneticAlgorithm(object):
 		gbest = self.population[0]
 		elapsed = datetime.now() - elapsed
 		duration += elapsed.total_seconds()
-		print('[{}]\tf(x) = {}\t{}\t{} sec'.format(0, gbest.fitness, gbest.phenotype, elapsed.total_seconds()))
+		# print('[{}]\tf(x) = {}\t{}\t{} sec'.format(0, gbest.fitness, gbest.phenotype, elapsed.total_seconds()))
+		print(f"[{0}]\tf(x) = {gbest.fitness}\t{gbest.phenotype}\t{elapsed.total_seconds()} sec")
 		for i in range(self.num_gen):
 			elapsed = datetime.now()
 			self.tournament_selection()
@@ -213,8 +214,10 @@ class GeneticAlgorithm(object):
 				gbest = deepcopy(fbest)
 			elapsed = datetime.now() - elapsed
 			duration += elapsed.total_seconds()
-			print('[{}]\tf(x) = {}\t{}\t{} sec'.format(i + 1, gbest.fitness, gbest.phenotype, elapsed.total_seconds()))
+			# print('[{}]\tf(x) = {}\t{}\t{} sec'.format(i + 1, gbest.fitness, gbest.phenotype, elapsed.total_seconds()))
+			print(f"[{i + 1}]\tf(x) = {gbest.fitness}\t{gbest.phenotype}\t{elapsed.total_seconds()} sec")
 		gen_avg = duration / (self.num_gen + 1)
 		ind_avg = duration / (self.pop_size * (self.num_gen + 1))
-		print('Elapsed time: {} sec\nAverage per generation: {} sec\nAverage per individual: {} sec'.format(duration, gen_avg, ind_avg))
+		# print('Elapsed time: {} sec\nAverage per generation: {} sec\nAverage per individual: {} sec'.format(duration, gen_avg, ind_avg))
+		print(f"Elapsed time: {duration} sec\nAverage per generation: {gen_avg} sec\nAverage per individual: {ind_avg} sec")
 		return (gbest, self.seed)
