@@ -54,7 +54,7 @@ def hdf5_2_video(filename):
 	# Set codec and file extension
 	codec = 'mp4v' if os == 'Darwin' else 'XVID'
 	extension = '.mp4' if os == 'Darwin' else '.avi'
-	outputfile = filename.replace('hdf5', extension)
+	outputfile = filename.replace('.hdf5', extension)
 	fourcc = cv2.VideoWriter_fourcc(*codec)
 	# Initialize timer
 	elapsed = datetime.now()

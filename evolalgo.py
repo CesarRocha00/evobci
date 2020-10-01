@@ -1,8 +1,10 @@
+import os
 import math
 import numpy as np
+import pandas as pd
 import operator as op
 from copy import deepcopy
-from datetime import datetime
+from time import perf_counter
 
 def bits_4_range(lower, upper, precision):
 	return int(math.ceil(math.log2((upper - lower) * math.pow(10, precision) + 1)))
@@ -33,7 +35,7 @@ class Individual(object):
 	def __init__(self):
 		super(Individual, self).__init__()
 		self.genotype = list()
-		self.phenotype = list()
+		self.phenotype = dict()
 		self.fitness = None
 
 
@@ -51,23 +53,22 @@ class GeneticAlgorithm(object):
 		self.parents = list()
 		self.population = list()
 		self.variable_conf = dict()
-		self.variable_name = list()
-		self.variable_bits = list()
+		self.variable_names = list()
 		self.num_vars = 0
 		self.total_bits = 0
 		self.func = None
 		self.crossover_types = {'npoint': self.npoint_crossover, 'binary': self.binary_crossover}
 		self.crossover_ind = self.crossover_types.get(self.cxtype, self.npoint_crossover)
-		self.comp = op.lt if minmax == 'min' else op.gt
+		self.compare = op.lt if minmax == 'min' else op.gt
 		self.reverse = False if minmax == 'min' else True
+		self.history = list()
 		self.seed = seed if seed is not None and seed >= 0 else np.random.randint(10000000)
 		np.random.seed(self.seed)
 
 	def add_variable(self, name, bounds=(0, 0), precision=0):
-		self.variable_conf[name] = {'bounds': bounds, 'precision': precision}
-		self.variable_name.append(name)
+		self.variable_names.append(name)
 		bits = bits_4_range(bounds[0], bounds[1], precision)
-		self.variable_bits.append(bits)
+		self.variable_conf[name] = {'bounds': bounds, 'precision': precision, 'bits': bits}
 		self.total_bits += bits
 		self.num_vars += 1
 
@@ -85,8 +86,9 @@ class GeneticAlgorithm(object):
 
 	def initialize_ind(self):
 		ind = Individual()
-		for n in self.variable_bits:
-			ind.genotype.append(np.random.randint(2, size=n))
+		for i in range(self.num_vars):
+			bits = self.variable_conf[self.variable_names[i]]['bits']
+			ind.genotype.append(np.random.randint(2, size=bits))
 		return ind
 
 	def decode_pop(self, pop):
@@ -94,17 +96,16 @@ class GeneticAlgorithm(object):
 			self.decode_ind(ind)
 
 	def decode_ind(self, ind):
-		ind.phenotype.clear()
 		for i in range(self.num_vars):
 			gray = ind.genotype[i]
 			binary = gray_2_binary(gray)
 			decimal = binary_2_decimal(binary)
-			bits = self.variable_bits[i]
-			min_val, max_val = self.variable_conf[self.variable_name[i]]['bounds']
-			precision = self.variable_conf[self.variable_name[i]]['precision']
+			bits = self.variable_conf[self.variable_names[i]]['bits']
+			precision = self.variable_conf[self.variable_names[i]]['precision']
+			min_val, max_val = self.variable_conf[self.variable_names[i]]['bounds']
 			value = fit_2_range(decimal, min_val, max_val, bits)
 			value = round(value, precision) if precision > 0 else int(value)
-			ind.phenotype.append(value)
+			ind.phenotype[self.variable_names[i]] = value
 
 	def evaluation_pop(self, pop):
 		for ind in pop:
@@ -123,7 +124,7 @@ class GeneticAlgorithm(object):
 				idx2 = np.random.randint(self.pop_size)
 			fitness1 = self.population[idx1].fitness
 			fitness2 = self.population[idx2].fitness
-			winner = idx1 if self.comp(fitness1, fitness2) else idx2
+			winner = idx1 if self.compare(fitness1, fitness2) else idx2
 			self.parents.append(winner)
 
 	def crossover_pop(self):
@@ -140,7 +141,8 @@ class GeneticAlgorithm(object):
 		new1 = deepcopy(ind1)
 		new2 = deepcopy(ind2)
 		for i in range(self.num_vars):
-			for j in range(self.variable_bits[i]):
+			bits = self.variable_conf[self.variable_names[i]]['bits']
+			for j in range(bits):
 				swap = np.random.rand() < 0.5
 				new1.genotype[i][j] = ind2.genotype[i][j] if swap else ind1.genotype[i][j]
 				new2.genotype[i][j] = ind1.genotype[i][j] if swap else ind2.genotype[i][j]
@@ -153,7 +155,8 @@ class GeneticAlgorithm(object):
 		new2 = deepcopy(ind2)
 		idx, swap = 0, False
 		for i in range(self.num_vars):
-			for j in range(self.variable_bits[i]):
+			bits = self.variable_conf[self.variable_names[i]]['bits']
+			for j in range(bits):
 				if points[idx]:
 					swap = not swap
 				new1.genotype[i][j] = ind2.genotype[i][j] if swap else ind1.genotype[i][j]
@@ -178,7 +181,8 @@ class GeneticAlgorithm(object):
 
 	def mutation_ind(self, ind):
 		for i in range(self.num_vars):
-			for j in range(self.variable_bits[i]):
+			bits = self.variable_conf[self.variable_names[i]]['bits']
+			for j in range(bits):
 				if np.random.rand() < self.mutpb:
 					ind.genotype[i][j] = 1 - ind.genotype[i][j]
 
@@ -189,20 +193,21 @@ class GeneticAlgorithm(object):
 		self.sort_population(self.population)
 		self.population = self.population[:self.pop_size]
 
-	def execute(self):
-		duration = 0
-		elapsed = datetime.now()
+	def execute(self, verbose=True):
+		self.history.clear()
+		duration = perf_counter()
+		elapsed = perf_counter()
 		self.initialize_pop()
 		self.decode_pop(self.population)
 		self.evaluation_pop(self.population)
 		self.sort_population(self.population)
 		gbest = self.population[0]
-		elapsed = datetime.now() - elapsed
-		duration += elapsed.total_seconds()
-		# print('[{}]\tf(x) = {}\t{}\t{} sec'.format(0, gbest.fitness, gbest.phenotype, elapsed.total_seconds()))
-		print(f"[{0}]\tf(x) = {gbest.fitness}\t{gbest.phenotype}\t{elapsed.total_seconds()} sec")
+		elapsed = perf_counter() - elapsed
+		self.send_to_history(gbest, elapsed)
+		if verbose:
+			self.display_progress(0, gbest, elapsed)
 		for i in range(self.num_gen):
-			elapsed = datetime.now()
+			elapsed = perf_counter()
 			self.tournament_selection()
 			self.crossover_pop()
 			self.mutation_pop(self.population[self.pop_size:])
@@ -210,14 +215,40 @@ class GeneticAlgorithm(object):
 			self.evaluation_pop(self.population[self.pop_size:])
 			self.survivor_selection()
 			fbest = self.population[0]
-			if self.comp(fbest.fitness, gbest.fitness):
+			if self.compare(fbest.fitness, gbest.fitness):
 				gbest = deepcopy(fbest)
-			elapsed = datetime.now() - elapsed
-			duration += elapsed.total_seconds()
-			# print('[{}]\tf(x) = {}\t{}\t{} sec'.format(i + 1, gbest.fitness, gbest.phenotype, elapsed.total_seconds()))
-			print(f"[{i + 1}]\tf(x) = {gbest.fitness}\t{gbest.phenotype}\t{elapsed.total_seconds()} sec")
+			elapsed = perf_counter() - elapsed
+			self.send_to_history(gbest, elapsed)
+			if verbose:
+				self.display_progress(i + 1, gbest, elapsed)
+		duration = perf_counter() - duration
+		if verbose:
+			self.display_summary(duration)
+		return gbest
+
+	def display_progress(self, gen, ind, elapsed):
+		print(f"[{gen}]\tf(x) = {ind.fitness}\t{ind.phenotype}\t{elapsed}s")
+
+	def display_summary(self, duration):
 		gen_avg = duration / (self.num_gen + 1)
 		ind_avg = duration / (self.pop_size * (self.num_gen + 1))
-		# print('Elapsed time: {} sec\nAverage per generation: {} sec\nAverage per individual: {} sec'.format(duration, gen_avg, ind_avg))
-		print(f"Elapsed time: {duration} sec\nAverage per generation: {gen_avg} sec\nAverage per individual: {ind_avg} sec")
-		return (gbest, self.seed)
+		template = "Elapsed time: {}s\nAvg. time per generation: {}s\nAvg. time per individual: {}s"
+		print(template.format(duration, gen_avg, ind_avg))
+
+	def send_to_history(self, ind, elapsed):
+		entry = [ind.phenotype[name] for name in self.variable_names]
+		entry.append(ind.fitness)
+		entry.append(elapsed)
+		self.history.append(entry)
+
+	def get_seed(self):
+		return self.seed
+
+	def save(self, filepath, include_initial_pop=False):
+		columns = deepcopy(self.variable_names)
+		columns.append('fitness')
+		columns.append('elapsed')
+		data = self.history if include_initial_pop else self.history[1:]
+		D = pd.DataFrame(data=data, columns=columns)
+		D.to_csv(filepath, index=False)
+		

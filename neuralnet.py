@@ -1,10 +1,8 @@
 import os
-import numpy as np
+# Silence every warning of notice from tensorflow
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
-import tensorflow.keras as kr
-
-# Prevent log messages from tensorflow
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+from tensorflow import keras as kr
 
 class MLP_NN(object):
 	"""docstring for MLP_NN"""
@@ -21,11 +19,10 @@ class MLP_NN(object):
 			self.model.add(kr.layers.Dense(layer[i], activation=activation[i]))
 		self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-	def train(self, X, y, val_size=None, epochs=16, verbose=0):
+	def train(self, X, y, val_size=None, epochs=10, verbose=0):
 		history = None
-		device_name = tf.test.gpu_device_name() if len(tf.config.list_physical_devices('GPU')) > 0 else '/device:CPU:0'
-		# if verbose == 0:
-		# 	print('Training with {}'.format(device_name))
+		is_gpu_available = len(tf.config.list_physical_devices('GPU')) > 0
+		device_name = tf.test.gpu_device_name() if is_gpu_available else '/device:CPU:0'
 		with tf.device(device_name):
 			history = self.model.fit(X, y, epochs=epochs, validation_split=val_size, shuffle=True, verbose=verbose)
 		return history
