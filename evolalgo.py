@@ -1,11 +1,9 @@
 import math
-import operator as op
-import os
-from copy import deepcopy
-from time import perf_counter
-
 import numpy as np
 import pandas as pd
+import operator as op
+from copy import deepcopy
+from time import perf_counter
 
 
 def bits_4_range(lower, upper, precision):

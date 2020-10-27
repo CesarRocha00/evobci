@@ -1,12 +1,10 @@
-import platform
+import cv2
 import sys
 import time
-from datetime import datetime
-
-import cv2
 import h5py
+import platform
 import numpy as np
-
+from datetime import datetime
 
 # Best FPS: [key, data]
 # Best compression: [key, data, maxshape=(frame.shape[0], frame.shape[1], frame.shape[2]), compression='gzip', chunks=True]

@@ -1,15 +1,12 @@
-import sys
-from pathlib import Path
-
 import click
 import numpy as np
-import pandas as pd
 import progressbar
-from eegtools import *
-from sklearn.preprocessing import MinMaxScaler
-
-from evolalgo import GeneticAlgorithm
+import pandas as pd
+from pathlib import Path
 from neuralnet import MLP_NN
+from evolalgo import GeneticAlgorithm
+from sklearn.preprocessing import MinMaxScaler
+from eeg_utils import notch, bandpass, split_train_test, extract_windows
 
 
 class Experiment_1(object):

@@ -1,4 +1,4 @@
-
+import numpy as np
 from scipy.signal import iirnotch, filtfilt, butter
 
 # Function to split EEG (Pandas DataFrame) into windows
@@ -69,7 +69,6 @@ def split_train_test(D, label_id, train_size):
 	label = D[label_id]
 	index = label[label == 1].index
 	train_events = int(round(index.size * train_size))
-	test_events = index.size - train_events
 	a, b = index[train_events - 1], index[train_events]
 	offset = (b - a) // 2
 	cut_point = a + offset

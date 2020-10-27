@@ -335,7 +335,6 @@ class BCISimulator(QMainWindow):
 		if (self.plotIndex[side] + val) >= 0 and (self.plotIndex[side] + val) < self.plotTotal[side]:
 			self.plotIndex[side] += val
 			data = self.T_tmp[self.plotIndex[side]] if side == 'left' else self.V_tmp[self.plotIndex[side]]
-			start = data.index[0]
 			self.plotViewer[side].plotData(data)
 			self.plotViewer[side].update()
 			self.updateLabel(side)
