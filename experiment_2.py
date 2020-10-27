@@ -1,16 +1,19 @@
 import sys
+from pathlib import Path
+
 import click
 import numpy as np
 import pandas as pd
 import progressbar
 from eegtools import *
-from pathlib import Path
-from neuralnet import MLP_NN
-from evolalgo import GeneticAlgorithm
 from sklearn.preprocessing import MinMaxScaler
 
-class Experiment_1(object):
-	"""docstring for Experiment_1"""
+from evolalgo import GeneticAlgorithm
+from neuralnet import MLP_NN
+
+
+class Experiment_2(object):
+	"""docstring for Experiment_2"""
 
 	# Global constants
 	fs = 250
@@ -20,7 +23,7 @@ class Experiment_1(object):
 	order = 5
 
 	def __init__(self, kwargs):
-		super(Experiment_1, self).__init__()
+		super(Experiment_2, self).__init__()
 		self.kwargs = kwargs
 		# Global variables
 		self.D_train = None
@@ -46,7 +49,7 @@ class Experiment_1(object):
 		# Normalization
 		self.D_train[self.channel_names] = MinMaxScaler().fit_transform(self.D_train[self.channel_names])
 		# Split data into training and validation
-		self.D_train, self.D_valid = split_training_validation(self.D_train, self.label_id, self.kwargs['split_ratio'])
+		self.D_train, self.D_valid = split_train_test(self.D_train, self.label_id, self.kwargs['train_size'])
 
 	def custom_accuracy(self, y_real, y_pred):
 		score = {
@@ -180,7 +183,7 @@ class Experiment_1(object):
 		# Add the problem name (inputfile) keeping only the filename without extension
 		dir_parts.append(Path(self.kwargs['inputfile']).stem)
 		# Add the GA parameters (population and generations)
-		dir_parts.append(f"P{self.kwargs['pop_size']}_G{self.kwargs['num_gen']}")
+		dir_parts.append(f"P{self.kwargs['pop_size']}_G{self.kwargs['num_gen']}_E{self.kwargs['epochs']}")
 		# Create directory of the experiment
 		path = Path(*dir_parts)
 		if not path.exists():
@@ -199,7 +202,7 @@ class Experiment_1(object):
 @click.option('-np', 'num_pts', type=click.IntRange(1, None), default=1, show_default=True, help='Number of crossover points.')
 @click.option('-mp', 'mutpb', type=click.FloatRange(-1.0, 0.9), default=-1.0, show_default=True, help='Mutation probability. Values less than 0 means uniform mutation.')
 @click.option('-e', 'epochs', type=click.IntRange(1, None), default=10, show_default=True, help='Epochs for ANN training.')
-@click.option('-sr', 'split_ratio', type=click.FloatRange(0.1, 0.9), default=0.7, show_default=True, help='Split ratio for training and validation.')
+@click.option('-ts', 'train_size', type=click.FloatRange(0.1, 0.9), default=0.7, show_default=True, help='Split ratio for training and validation.')
 def main(**kwargs):
 	path = Path(kwargs['outputdir'])
 	if not path.exists():

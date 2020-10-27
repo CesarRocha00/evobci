@@ -1,3 +1,4 @@
+
 from scipy.signal import iirnotch, filtfilt, butter
 
 # Function to split EEG (Pandas DataFrame) into windows
@@ -51,12 +52,8 @@ def max_window_size(D, label_id):
 	# Add left and right bounds
 	index.insert(0, 0)
 	index.append(D.index[-1])
-	# One minute in samples
-	maxSize = float('inf')
-	for i in range(len(index) - 1):
-		dist = index[i + 1] - index[i]
-		if dist < maxSize: maxSize = dist
-	return maxSize
+	max_size = min([index[i + 1] - index[i] for i in range(len(index) - 1)])
+	return max_size
 
 # Refactor a dataset to have equal number of examples per class
 def balance_dataset(X, y):
@@ -68,12 +65,12 @@ def balance_dataset(X, y):
 	return (X[index], y[index])
 
 # Split an EEG based on a number (%) of events
-def split_training_validation(D, label_id, validation_split):
+def split_train_test(D, label_id, train_size):
 	label = D[label_id]
 	index = label[label == 1].index
-	validation_events = int(round(index.size * validation_split))
-	training_events = index.size - validation_events
-	a, b = index[training_events - 1], index[training_events]
+	train_events = int(round(index.size * train_size))
+	test_events = index.size - train_events
+	a, b = index[train_events - 1], index[train_events]
 	offset = (b - a) // 2
 	cut_point = a + offset
 	X_train = D.iloc[:cut_point]

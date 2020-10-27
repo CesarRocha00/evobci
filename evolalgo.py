@@ -1,10 +1,12 @@
-import os
 import math
-import numpy as np
-import pandas as pd
 import operator as op
+import os
 from copy import deepcopy
 from time import perf_counter
+
+import numpy as np
+import pandas as pd
+
 
 def bits_4_range(lower, upper, precision):
 	return int(math.ceil(math.log2((upper - lower) * math.pow(10, precision) + 1)))
