@@ -41,7 +41,7 @@ class Individual(object):
 
 class GeneticAlgorithm(object):
 	"""docstring for GeneticAlgorithm"""
-	def __init__(self, pop_size=2, num_gen=1, cxpb=0.9, cxtype='npoint', num_pts=1, mutpb=-1.0, minmax='min', seed=None):
+	def __init__(self, pop_size=2, num_gen=0, cxpb=0.9, cxtype='npoint', num_pts=1, mutpb=-1.0, minmax='min', seed=None):
 		super(GeneticAlgorithm, self).__init__()
 		self.pop_size = pop_size
 		self.num_gen = num_gen
@@ -52,8 +52,8 @@ class GeneticAlgorithm(object):
 		self.minmax = minmax
 		self.parents = list()
 		self.population = list()
-		self.variable_conf = dict()
-		self.variable_names = list()
+		self.variable_info = dict()
+		self.variable_name = list()
 		self.num_vars = 0
 		self.total_bits = 0
 		self.func = None
@@ -65,10 +65,10 @@ class GeneticAlgorithm(object):
 		self.seed = seed if seed is not None and seed >= 0 else np.random.randint(10000000)
 		np.random.seed(self.seed)
 
-	def add_variable(self, name, bounds=(0, 0), precision=0):
-		self.variable_names.append(name)
-		bits = bits_4_range(bounds[0], bounds[1], precision)
-		self.variable_conf[name] = {'bounds': bounds, 'precision': precision, 'bits': bits}
+	def add_variable(self, name, bounds=(0, 0), precision=0, size=1):
+		self.variable_name.append(name)
+		bits = bits_4_range(bounds[0], bounds[1], precision) * size
+		self.variable_info[name] = {'bounds': bounds, 'precision': precision, 'bits': bits, 'size': size}
 		self.total_bits += bits
 		self.num_vars += 1
 
@@ -87,7 +87,8 @@ class GeneticAlgorithm(object):
 	def initialize_ind(self):
 		ind = Individual()
 		for i in range(self.num_vars):
-			bits = self.variable_conf[self.variable_names[i]]['bits']
+			name = self.variable_name[i]
+			bits = self.variable_info[name]['bits']
 			ind.genotype.append(np.random.randint(2, size=bits))
 		return ind
 
@@ -97,16 +98,27 @@ class GeneticAlgorithm(object):
 
 	def decode_ind(self, ind):
 		for i in range(self.num_vars):
-			gray = ind.genotype[i]
-			binary = gray_2_binary(gray)
+			name = self.variable_name[i]
+			info = self.variable_info[name]
+			gene = ind.genotype[i]
+			value = self.decode_var(gene, info)
+			ind.phenotype[name] = value
+
+	def decode_var(self, gene, info):
+		size = info['size']
+		bits = info['bits'] // size
+		precision = info['precision']
+		min_val, max_val = info['bounds']
+		gene = gene.reshape((size, bits))
+		mapped = list()
+		for part in gene:
+			binary = gray_2_binary(part)
 			decimal = binary_2_decimal(binary)
-			bits = self.variable_conf[self.variable_names[i]]['bits']
-			precision = self.variable_conf[self.variable_names[i]]['precision']
-			min_val, max_val = self.variable_conf[self.variable_names[i]]['bounds']
 			value = fit_2_range(decimal, min_val, max_val, bits)
 			value = round(value, precision) if precision > 0 else int(value)
-			ind.phenotype[self.variable_names[i]] = value
-
+			mapped.append(value)
+		return np.array(mapped) if size > 1 else mapped[0]
+			
 	def evaluation_pop(self, pop):
 		for ind in pop:
 			self.evaluation_ind(ind)
@@ -141,7 +153,8 @@ class GeneticAlgorithm(object):
 		new1 = deepcopy(ind1)
 		new2 = deepcopy(ind2)
 		for i in range(self.num_vars):
-			bits = self.variable_conf[self.variable_names[i]]['bits']
+			name = self.variable_name[i]
+			bits = self.variable_info[name]['bits']
 			for j in range(bits):
 				swap = np.random.rand() < 0.5
 				new1.genotype[i][j] = ind2.genotype[i][j] if swap else ind1.genotype[i][j]
@@ -155,7 +168,8 @@ class GeneticAlgorithm(object):
 		new2 = deepcopy(ind2)
 		idx, swap = 0, False
 		for i in range(self.num_vars):
-			bits = self.variable_conf[self.variable_names[i]]['bits']
+			name = self.variable_name[i]
+			bits = self.variable_info[name]['bits']
 			for j in range(bits):
 				if points[idx]:
 					swap = not swap
@@ -181,7 +195,8 @@ class GeneticAlgorithm(object):
 
 	def mutation_ind(self, ind):
 		for i in range(self.num_vars):
-			bits = self.variable_conf[self.variable_names[i]]['bits']
+			name = self.variable_name[i]
+			bits = self.variable_info[name]['bits']
 			for j in range(bits):
 				if np.random.rand() < self.mutpb:
 					ind.genotype[i][j] = 1 - ind.genotype[i][j]
@@ -193,7 +208,7 @@ class GeneticAlgorithm(object):
 		self.sort_population(self.population)
 		self.population = self.population[:self.pop_size]
 
-	def execute(self, verbose=True):
+	def execute(self, verbose=1, display=['fitness', 'phenotype', 'elapsed']):
 		self.history.clear()
 		duration = perf_counter()
 		elapsed = perf_counter()
@@ -204,8 +219,8 @@ class GeneticAlgorithm(object):
 		gbest = self.population[0]
 		elapsed = perf_counter() - elapsed
 		self.send_to_history(gbest, elapsed)
-		if verbose:
-			self.display_progress(0, gbest, elapsed)
+		if verbose > 1:
+			self.display_progress(0, gbest, elapsed, display)
 		for i in range(self.num_gen):
 			elapsed = perf_counter()
 			self.tournament_selection()
@@ -219,15 +234,21 @@ class GeneticAlgorithm(object):
 				gbest = deepcopy(fbest)
 			elapsed = perf_counter() - elapsed
 			self.send_to_history(gbest, elapsed)
-			if verbose:
-				self.display_progress(i + 1, gbest, elapsed)
+			if verbose > 1:
+				self.display_progress(i + 1, gbest, elapsed, display)
 		duration = perf_counter() - duration
-		if verbose:
+		if verbose > 0:
 			self.display_summary(duration)
 		return gbest
 
-	def display_progress(self, gen, ind, elapsed):
-		print(f"[{gen}]\tf(x) = {ind.fitness}\t{ind.phenotype}\t{elapsed}s")
+	def display_progress(self, gen, ind, elapsed, display):
+		output = f"[{gen}]\t"
+		display_dict = {'fitness': f"f(x) = {ind.fitness}",
+						'phenotype': f"{ind.phenotype}",
+						'elapsed': f"{elapsed}s"}
+		for item in display:
+			output += display_dict[item] + '\t'
+		print(output)
 
 	def display_summary(self, duration):
 		gen_avg = duration / (self.num_gen + 1)
@@ -236,7 +257,7 @@ class GeneticAlgorithm(object):
 		print(template.format(duration, gen_avg, ind_avg))
 
 	def send_to_history(self, ind, elapsed):
-		entry = [ind.phenotype[name] for name in self.variable_names]
+		entry = [ind.phenotype[name] for name in self.variable_name]
 		entry.append(ind.fitness)
 		entry.append(elapsed)
 		self.history.append(entry)
@@ -245,7 +266,7 @@ class GeneticAlgorithm(object):
 		return self.seed
 
 	def save(self, filepath, include_initial_pop=False):
-		columns = deepcopy(self.variable_names)
+		columns = deepcopy(self.variable_name)
 		columns.append('fitness')
 		columns.append('elapsed')
 		data = self.history if include_initial_pop else self.history[1:]

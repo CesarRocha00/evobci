@@ -57,11 +57,11 @@ def max_window_size(D, label_id):
 
 # Refactor a dataset to have equal number of examples per class
 def balance_dataset(X, y):
-	pos = (y == 1).nonzero()[0]
-	neg = (y == 0).nonzero()[0]
-	total_pos = pos.size
-	fill = np.random.choice(neg, total_pos, replace=False)
-	index = np.concatenate((pos, fill), axis=0)
+	positives = (y == 1).nonzero()[0]
+	negatives = (y == 0).nonzero()[0]
+	total_pos = positives.size
+	selected = np.random.choice(negatives, total_pos, replace=False)
+	index = np.concatenate((positives, selected), axis=0)
 	return (X[index], y[index])
 
 # Split an EEG based on a number (%) of events

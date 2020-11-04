@@ -10,7 +10,16 @@ from eeg_utils import notch, bandpass, split_train_test, extract_windows
 
 
 class Experiment_1(object):
-	"""docstring for Experiment_1"""
+	"""
+	Optimization of 
+	- window size
+	- window overlap
+	- channel selection.
+
+	* Training with consecutive overlaped windows
+	* Validation with consecutive overlaped windows
+	* Custom accuracy/fitness function
+	"""
 
 	# Global constants
 	fs = 250
