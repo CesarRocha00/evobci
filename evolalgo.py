@@ -56,13 +56,14 @@ class GeneticAlgorithm(object):
 		self.variable_name = list()
 		self.num_vars = 0
 		self.total_bits = 0
-		self.func = None
+		self.function = None
+		self.metric_name = None
 		self.crossover_types = {'npoint': self.npoint_crossover, 'binary': self.binary_crossover}
 		self.crossover_ind = self.crossover_types.get(self.cxtype, self.npoint_crossover)
 		self.compare = op.lt if minmax == 'min' else op.gt
 		self.reverse = False if minmax == 'min' else True
 		self.history = list()
-		self.seed = seed if seed is not None and seed >= 0 else np.random.randint(10000000)
+		self.seed = seed if seed != None and seed >= 0 else np.random.randint(10000000)
 		np.random.seed(self.seed)
 
 	def add_variable(self, name, bounds=(0, 0), precision=0, size=1):
@@ -72,8 +73,9 @@ class GeneticAlgorithm(object):
 		self.total_bits += bits
 		self.num_vars += 1
 
-	def set_fitness_func(self, func):
-		self.func = func
+	def set_fitness_func(self, function, metric_name):
+		self.function = function
+		self.metric_name = metric_name
 
 	def initialize_pop(self):
 		self.population.clear()
@@ -124,18 +126,19 @@ class GeneticAlgorithm(object):
 			self.evaluation_ind(ind)
 
 	def evaluation_ind(self, ind):
-		ind.fitness = self.func(ind.phenotype)
+		ind.fitness = self.function(ind.phenotype)
 
 	def tournament_selection(self):
 		idx1 = idx2 = -1
 		self.parents.clear()
+		# Change randint to sample
 		for i in range(self.pop_size):
 			idx1 = np.random.randint(self.pop_size)
 			idx2 = idx1
 			while idx2 == idx1:
 				idx2 = np.random.randint(self.pop_size)
-			fitness1 = self.population[idx1].fitness
-			fitness2 = self.population[idx2].fitness
+			fitness1 = self.population[idx1].fitness[self.metric_name]
+			fitness2 = self.population[idx2].fitness[self.metric_name]
 			winner = idx1 if self.compare(fitness1, fitness2) else idx2
 			self.parents.append(winner)
 
@@ -202,7 +205,7 @@ class GeneticAlgorithm(object):
 					ind.genotype[i][j] = 1 - ind.genotype[i][j]
 
 	def sort_population(self, pop):
-		pop.sort(key=lambda ind: ind.fitness, reverse=self.reverse)
+		pop.sort(key=lambda ind: ind.fitness[self.metric_name], reverse=self.reverse)
 
 	def survivor_selection(self):
 		self.sort_population(self.population)
@@ -230,7 +233,7 @@ class GeneticAlgorithm(object):
 			self.evaluation_pop(self.population[self.pop_size:])
 			self.survivor_selection()
 			fbest = self.population[0]
-			if self.compare(fbest.fitness, gbest.fitness):
+			if self.compare(fbest.fitness[self.metric_name], gbest.fitness[self.metric_name]):
 				gbest = deepcopy(fbest)
 			elapsed = perf_counter() - elapsed
 			self.send_to_history(gbest, elapsed)
@@ -243,7 +246,7 @@ class GeneticAlgorithm(object):
 
 	def display_progress(self, gen, ind, elapsed, display):
 		output = f"[{gen}]\t"
-		display_dict = {'fitness': f"f(x) = {ind.fitness}",
+		display_dict = {'fitness': f"f(x) = {ind.fitness[self.metric_name]}",
 						'phenotype': f"{ind.phenotype}",
 						'elapsed': f"{elapsed}s"}
 		for item in display:
@@ -257,19 +260,27 @@ class GeneticAlgorithm(object):
 		print(template.format(duration, gen_avg, ind_avg))
 
 	def send_to_history(self, ind, elapsed):
-		entry = [ind.phenotype[name] for name in self.variable_name]
-		entry.append(ind.fitness)
-		entry.append(elapsed)
+		entry = [deepcopy(ind), elapsed]
 		self.history.append(entry)
 
 	def get_seed(self):
 		return self.seed
 
 	def save(self, filepath, include_initial_pop=False):
+		history = self.history if include_initial_pop else self.history[1:]
 		columns = deepcopy(self.variable_name)
-		columns.append('fitness')
+		metric_name = list(self.population[0].fitness.keys())
+		metric_name[metric_name.index(self.metric_name)] = 'fitness'
+		columns.extend(metric_name)
 		columns.append('elapsed')
-		data = self.history if include_initial_pop else self.history[1:]
+		data = list()
+		for entry in history:
+			ind = entry[0]
+			elapsed = entry[1]
+			row = list(ind.phenotype.values())
+			row.extend(list(ind.fitness.values()))
+			row.append(elapsed)
+			data.append(row)
 		D = pd.DataFrame(data=data, columns=columns)
 		D.to_csv(filepath, index=False)
 		

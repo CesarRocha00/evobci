@@ -130,15 +130,11 @@ class Experiment_1(object):
 		history = model.train(X_train, y_train, val_size=0.3, epochs=self.kwargs['epochs'], verbose=0)
 		y_pred = model.predict(X_valid)
 		score = self.custom_accuracy(y_valid, y_pred)
-		accuracy = score['accuracy']
 		# Keep the best model
-		if (self.best_acc is None) or (accuracy > self.best_acc):
-			self.best_acc = accuracy
+		if (self.best_acc == None) or (score['accuracy'] > self.best_acc):
+			self.best_acc = score['accuracy']
 			self.best_mod = model
-		return accuracy
-
-	def sphere(self, phenotype):
-		return (lambda X: sum(x ** 2 for x in X))(list(phenotype.values()))
+		return score
 
 	def run_algorithm(self):
 		self.best_acc = None
@@ -153,9 +149,9 @@ class Experiment_1(object):
 		for name in self.channel_names:
 			self.alg.add_variable(name, bounds=(0, 1), precision=0)
 		# Set the fitness function
-		self.alg.set_fitness_func(self.custom_fitness)
+		self.alg.set_fitness_func(self.custom_fitness, 'accuracy')
 		# Execute and get the best individual
-		self.best_ind = self.alg.execute(verbose=False)
+		self.best_ind = self.alg.execute(verbose=0)
 		
 	def execute(self):
 		self.data_preprocessing()
