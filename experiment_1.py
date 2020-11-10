@@ -27,6 +27,7 @@ class Experiment_1(object):
 	low = 1
 	high = 12
 	order = 5
+	metric = 'ACC'
 
 	def __init__(self, kwargs):
 		super(Experiment_1, self).__init__()
@@ -37,7 +38,7 @@ class Experiment_1(object):
 		self.label_id = None
 		self.channel_names = None
 		self.channel_total = None
-		self.best_acc = None
+		self.best_val = None
 		self.best_mod = None
 		self.best_ind = None
 		self.alg = None
@@ -57,37 +58,37 @@ class Experiment_1(object):
 		# Split data into training and validation
 		self.D_train, self.D_valid = split_train_test(self.D_train, self.label_id, self.kwargs['train_size'])
 
-	def custom_accuracy(self, y_real, y_pred):
+	def custom_metric(self, y_real, y_pred):
 		score = {
-			'tp': 0, 'fp': 0,
-			'tn': 0, 'fn': 0,
-			'lost': 0,
-			'accuracy': 0.0
+			'TP': 0, 'FP': 0,
+			'TN': 0, 'FN': 0,
+			'LOST': 0,
+			self.metric: 0.0
 		}
 		possibleFN, missingTP = False, True
 		for real, pred in zip(y_real, y_pred):
 			# Confusion matrix
 			if real == 0 and pred == 0:
-				score['tn'] += 1
+				score['TN'] += 1
 			elif real == 0 and pred == 1:
-				score['fp'] += 1
+				score['FP'] += 1
 			elif real == 1 and pred == 1 and missingTP:
-				score['tp'] += 1
+				score['TP'] += 1
 				missingTP = False
 			elif real == 1 and pred == 0 and missingTP:
 				possibleFN = True
 			else:
-				score['lost'] += 1
+				score['LOST'] += 1
 			# Check for FN and flag reset
 			if real == 0:
-				score['fn'] += 1 if possibleFN and missingTP else 0
+				score['FN'] += 1 if possibleFN and missingTP else 0
 				possibleFN, missingTP = False, True
 		# Stats
-		positives = score['tp'] + score['fn']
-		negatives = score['tn'] + score['fp']
-		score['accuracy'] = 0.0
+		positives = score['TP'] + score['FN']
+		negatives = score['TN'] + score['FP']
+		score[self.metric] = 0.0
 		if positives != 0 and negatives != 0:
-			score['accuracy'] = 0.5 * (score['tp'] / positives) + 0.5 * (score['tn'] / negatives)
+			score[self.metric] = 0.5 * (score['TP'] / positives) + 0.5 * (score['TN'] / negatives)
 		return score
 
 	def custom_fitness(self, phenotype):
@@ -129,15 +130,15 @@ class Experiment_1(object):
 		model.build(input_dim, layer, activation, optimizer, loss, metrics)
 		history = model.train(X_train, y_train, val_size=0.3, epochs=self.kwargs['epochs'], verbose=0)
 		y_pred = model.predict(X_valid)
-		score = self.custom_accuracy(y_valid, y_pred)
+		score = self.custom_metric(y_valid, y_pred)
 		# Keep the best model
-		if (self.best_acc == None) or (score['accuracy'] > self.best_acc):
-			self.best_acc = score['accuracy']
+		if (self.best_val == None) or (score[self.metric] > self.best_val):
+			self.best_val = score[self.metric]
 			self.best_mod = model
 		return score
 
 	def run_algorithm(self):
-		self.best_acc = None
+		self.best_val = None
 		self.best_mod = None
 		self.best_ind = None
 		# Initialize algorithm
@@ -149,7 +150,7 @@ class Experiment_1(object):
 		for name in self.channel_names:
 			self.alg.add_variable(name, bounds=(0, 1), precision=0)
 		# Set the fitness function
-		self.alg.set_fitness_func(self.custom_fitness, 'accuracy')
+		self.alg.set_fitness_func(self.custom_fitness, self.metric)
 		# Execute and get the best individual
 		self.best_ind = self.alg.execute(verbose=0)
 		
