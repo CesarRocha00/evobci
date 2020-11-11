@@ -7,18 +7,19 @@ from neuralnet import MLP_NN
 from evolalgo import GeneticAlgorithm
 from sklearn.preprocessing import MinMaxScaler
 from eeg_utils import notch, bandpass, split_train_test, extract_windows
+import matplotlib.pyplot as plt
 
 
-class Experiment_1(object):
+class Experiment_4(object):
 	"""
 	Optimization of 
-	- window size
 	- window overlap
-	- channel selection.
+	- channel selection
+	- feature selection
 
-	* Training with consecutive overlaped windows
+	* Training with centered events windows
 	* Validation with consecutive overlaped windows
-	* Custom accuracy/fitness function
+	* Custom fitness function
 	"""
 
 	# Global constants
@@ -27,16 +28,20 @@ class Experiment_1(object):
 	low = 1
 	high = 12
 	order = 5
-	metric = 'ACC'
+	wsize = 250
+	metric = 'F1-Score'
 
 	def __init__(self, kwargs):
-		super(Experiment_1, self).__init__()
+		super(Experiment_4, self).__init__()
 		self.kwargs = kwargs
 		# Global variables
 		self.D_train = None
 		self.D_valid = None
+		self.X_train = None
+		self.y_train = None
 		self.label_id = None
 		self.channel_names = None
+		self.variable_names = None
 		self.channel_total = None
 		self.best_val = None
 		self.best_mod = None
@@ -49,6 +54,7 @@ class Experiment_1(object):
 		# Get some info
 		self.label_id = self.D_train.columns[-1]
 		self.channel_names = self.D_train.columns[:-1]
+		self.variable_names = [f'{name}_{i + 1}' for name in self.channel_names for i in range(self.wsize)]
 		self.channel_total = self.channel_names.size
 		# Apply filters
 		notch(self.D_train, self.fs, self.w0, self.channel_total)
@@ -57,6 +63,15 @@ class Experiment_1(object):
 		self.D_train[self.channel_names] = MinMaxScaler().fit_transform(self.D_train[self.channel_names])
 		# Split data into training and validation
 		self.D_train, self.D_valid = split_train_test(self.D_train, self.label_id, self.kwargs['train_size'])
+		# Create training dataset
+		num_events = self.D_train[self.label_id].sum()
+		# Window extraction as pandas DataFrame
+		self.X_train, self.y_train = extract_windows(self.D_train, self.wsize, 0.0, self.label_id, fixed=True)
+		# Keep equal number of positive and negative examples
+		if len(self.y_train) > num_events * 2:
+			self.X_train = self.X_train[:num_events * 2]
+			self.y_train = self.y_train[:num_events * 2]
+		self.y_train = np.array(self.y_train)
 
 	def custom_metric(self, y_real, y_pred):
 		score = {
@@ -84,34 +99,44 @@ class Experiment_1(object):
 				score['FN'] += 1 if possibleFN and missingTP else 0
 				possibleFN, missingTP = False, True
 		# Stats
-		positives = score['TP'] + score['FN']
-		negatives = score['TN'] + score['FP']
-		score[self.metric] = 0.0
-		if positives != 0 and negatives != 0:
-			score[self.metric] = 0.5 * (score['TP'] / positives) + 0.5 * (score['TN'] / negatives)
+		try:
+			PPV = score['TP'] / (score['TP'] + score['FP'])
+			TPR = score['TP'] / (score['TP'] + score['FN'])
+			score[self.metric] = 2 * (PPV * TPR) / (PPV + TPR)
+		except ZeroDivisionError:
+			score[self.metric] = 0.0
 		return score
 
 	def custom_fitness(self, phenotype):
 		# Make a copy of the continuous EEG (for future evaluations)
-		X_train = self.D_train.copy()
 		X_valid = self.D_valid.copy()
 		# Extract the window segmentation vars
-		wsize = phenotype['size']
 		wover = phenotype['overlap']
-		# Extract the list of selected channels
+		# Extract the list of active channels
 		channels = [name for name in self.channel_names if phenotype[name] == 1]
 		channel_count = len(channels)
-		# If channel list is empty, accuracy is zero
-		if channel_count == 0:
+		# Generate new variable names based on the active channels 
+		variable_names = [f'{name}_{i + 1}' for name in channels for i in range(self.wsize)]
+		# Extract the list of active/inactive positios
+		positions = np.array([phenotype[name] for name in variable_names])
+		position_count = positions.sum()
+		# If no position was selected accuracy is zero
+		if channel_count == 0 or position_count == 0:
 			return {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0, 'LOST': 0, self.metric: 0.0}
+		# Check for inactive positions
+		inactives = np.where(positions == 0)[0]
+		# Remove off channels and convert each window into a flatted numpy array 
+		X_train = np.array([win[channels].T.values.ravel() for win in self.X_train])
+		y_train = self.y_train
+		# Delete inactive positios
+		X_train = np.delete(X_train, inactives, axis=1)
 		# Window segmentation
-		X_train, y_train = extract_windows(X_train, wsize, wover, self.label_id)
-		X_valid, y_valid = extract_windows(X_valid, wsize, wover, self.label_id)
+		X_valid, y_valid = extract_windows(X_valid, self.wsize, wover, self.label_id)
 		# Map list of DataFrames to numpy arrays
-		X_train = np.array([win[channels].values.T.ravel() for win in X_train])
-		y_train = np.array(y_train)
-		X_valid = np.array([win[channels].values.T.ravel() for win in X_valid])
+		X_valid = np.array([win[channels].T.values.ravel() for win in X_valid])
 		y_valid = np.array(y_valid)
+		# Delete inactive positios
+		X_valid = np.delete(X_valid, inactives, axis=1)
 		# Neural network structure
 		input_dim = X_train[0].size
 		output_dim = 1
@@ -145,9 +170,10 @@ class Experiment_1(object):
 		self.alg = GeneticAlgorithm(self.kwargs['pop_size'], self.kwargs['num_gen'], self.kwargs['cxpb'],
 							   self.kwargs['cxtype'], mutpb=self.kwargs['mutpb'], minmax='max')
 		# Add variables
-		self.alg.add_variable('size', bounds=(50, 250), precision=0)
 		self.alg.add_variable('overlap', bounds=(0.1, 0.9), precision=2)
 		for name in self.channel_names:
+			self.alg.add_variable(name, bounds=(0, 1), precision=0)
+		for name in self.variable_names:
 			self.alg.add_variable(name, bounds=(0, 1), precision=0)
 		# Set the fitness function
 		self.alg.set_fitness_func(self.custom_fitness, self.metric)
@@ -207,7 +233,7 @@ def main(**kwargs):
 	if not path.exists():
 		print('Output directory does not exists!')
 		return None
-	expt = Experiment_1(kwargs)
+	expt = Experiment_4(kwargs)
 	expt.execute()
 		
 

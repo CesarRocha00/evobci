@@ -94,7 +94,7 @@ class Experiment_2(object):
 		return score
 
 	def custom_fitness(self, phenotype):
-		# Make a copy of the continuous EEG
+		# Make a copy of the continuous EEG (for future evaluations)
 		X_train = self.D_train.copy()
 		X_valid = self.D_valid.copy()
 		# Extract the window segmentation vars
@@ -107,7 +107,7 @@ class Experiment_2(object):
 		channel_count = len(channels)
 		# If channel list is empty, accuracy is zero
 		if channel_count == 0:
-			return 0.0
+			return {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0, 'LOST': 0, self.metric: 0.0}
 		# Window segmentation
 		X_train, y_train = extract_windows(X_train, wsize, wover, self.label_id, True, wpadd, wstep)
 		X_valid, y_valid = extract_windows(X_valid, wsize, wover, self.label_id)

@@ -14,12 +14,11 @@ class Experiment_3(object):
 	"""
 	Optimization of 
 	- window overlap
-	- channel selection
 	- feature selection
 
 	* Training with centered events windows
 	* Validation with consecutive overlaped windows
-	* Custom accuracy/fitness function
+	* Custom fitness function
 	"""
 
 	# Global constants
@@ -101,13 +100,16 @@ class Experiment_3(object):
 				score['FN'] += 1 if possibleFN and missingTP else 0
 				possibleFN, missingTP = False, True
 		# Stats
-		PPV = score['TP'] / (score['TP'] + score['FP'])
-		TPR = score['TP'] / (score['TP'] + score['FN'])
-		score[self.metric] = 2 * (PPV * TPR) / (PPV + TPR)
+		try:
+			PPV = score['TP'] / (score['TP'] + score['FP'])
+			TPR = score['TP'] / (score['TP'] + score['FN'])
+			score[self.metric] = 2 * (PPV * TPR) / (PPV + TPR)
+		except ZeroDivisionError:
+			score[self.metric] = 0.0
 		return score
 
 	def custom_fitness(self, phenotype):
-		# Make a copy of the continuous EEG
+		# Make a copy of the continuous EEG (for future evaluations)
 		X_valid = self.D_valid.copy()
 		# Extract the window segmentation vars
 		wover = phenotype['overlap']
@@ -116,7 +118,7 @@ class Experiment_3(object):
 		position_count = positions.sum()
 		# If no position was selected accuracy is zero
 		if position_count == 0:
-			return 0.0
+			return {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0, 'LOST': 0, self.metric: 0.0}
 		# Check for inactive positions
 		inactives = np.where(positions == 0)[0]
 		# Delete inactive positios
