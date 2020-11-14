@@ -28,7 +28,7 @@ class Experiment_3(object):
 	high = 12
 	order = 5
 	wsize = 250
-	metric = 'F1-Score'
+	metric = 'F-Score'
 
 	def __init__(self, kwargs):
 		super(Experiment_3, self).__init__()
