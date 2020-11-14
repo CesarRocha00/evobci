@@ -60,7 +60,7 @@ class Experiment_2(object):
 		# Split data into training and validation
 		self.D_train, self.D_valid = split_train_test(self.D_train, self.label_id, self.kwargs['train_size'])
 
-		def custom_metric(self, y_real, y_pred):
+	def custom_metric(self, y_real, y_pred):
 		score = {
 			'TP': 0, 'FP': 0,
 			'TN': 0, 'FN': 0,
@@ -86,11 +86,12 @@ class Experiment_2(object):
 				score['FN'] += 1 if possibleFN and missingTP else 0
 				possibleFN, missingTP = False, True
 		# Stats
-		positives = score['TP'] + score['FN']
-		negatives = score['TN'] + score['FP']
-		score[self.metric] = 0.0
-		if positives != 0 and negatives != 0:
-			score[self.metric] = 0.5 * (score['TP'] / positives) + 0.5 * (score['TN'] / negatives)
+		try:
+			TPR = score['TP'] / (score['TP'] + score['FN'])
+			TNR = score['TN'] / (score['TN'] + score['FP'])
+			score[self.metric] = (TPR + TNR) / 2
+		except ZeroDivisionError:
+			pass
 		return score
 
 	def custom_fitness(self, phenotype):
@@ -167,7 +168,8 @@ class Experiment_2(object):
 		bar = progressbar.ProgressBar(widgets=widgets, max_value=self.kwargs['num_exe']).start()
 		for i in range(self.kwargs['num_exe']):
 			self.run_algorithm()
-			self.save_data(i + 1)
+			if self.kwargs['outputdir'] is not None:
+				self.save_data(i + 1)
 			bar.update(i + 1)
 		bar.finish()
 
@@ -197,8 +199,8 @@ class Experiment_2(object):
 
 
 @click.command()
-@click.argument('INPUTFILE', required=True)
-@click.argument('OUTPUTDIR', required=True)
+@click.argument('INPUTFILE', type=click.Path(exists=True, dir_okay=False), required=True)
+@click.argument('OUTPUTDIR', type=click.Path(exists=True, file_okay=False), required=False)
 @click.option('-n', 'num_exe', type=click.IntRange(1, None), required=True, help='Number of executions.')
 @click.option('-p', 'pop_size', type=click.IntRange(2, None), required=True, help='Size of the entire population.')
 @click.option('-g', 'num_gen', type=click.IntRange(0, None), required=True, help='Number of generations to evolve.')
@@ -209,10 +211,6 @@ class Experiment_2(object):
 @click.option('-e', 'epochs', type=click.IntRange(1, None), default=10, show_default=True, help='Epochs for ANN training.')
 @click.option('-ts', 'train_size', type=click.FloatRange(0.1, 0.9), default=0.7, show_default=True, help='Split ratio for training and validation.')
 def main(**kwargs):
-	path = Path(kwargs['outputdir'])
-	if not path.exists():
-		print('Output directory does not exists!')
-		return None
 	expt = Experiment_2(kwargs)
 	expt.execute()
 		

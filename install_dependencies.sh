@@ -1,1 +1,0 @@
-python3 -m pip install tensorflow numpy==1.19.0 h5py pandas scipy scikit-learn click progressbar2 matplotlib pylsl opencv-python==4.1.2.30 PyQt5 pyqtgraph seaborn
