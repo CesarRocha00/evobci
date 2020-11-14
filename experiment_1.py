@@ -27,7 +27,7 @@ class Experiment_1(object):
 	low = 1
 	high = 12
 	order = 5
-	metric = 'ACC'
+	metric = 'BA'
 
 	def __init__(self, kwargs):
 		super(Experiment_1, self).__init__()
