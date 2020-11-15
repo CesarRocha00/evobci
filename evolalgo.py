@@ -41,14 +41,14 @@ class Individual(object):
 
 class GeneticAlgorithm(object):
 	"""docstring for GeneticAlgorithm"""
-	def __init__(self, pop_size=2, num_gen=0, cxpb=0.9, cxtype='npoint', num_pts=1, mutpb=-1.0, minmax='min', seed=None):
+	def __init__(self, pop_size=2, num_gen=0, cx_pr=0.9, cx_type='npoint', num_pts=1, mut_pr=-1.0, minmax='min', seed=None):
 		super(GeneticAlgorithm, self).__init__()
 		self.pop_size = pop_size
 		self.num_gen = num_gen
-		self.cxpb = cxpb
-		self.cxtype = cxtype
+		self.cx_pr = cx_pr
+		self.cx_type = cx_type
 		self.num_pts = num_pts
-		self.mutpb = mutpb
+		self.mut_pr = mut_pr
 		self.minmax = minmax
 		self.parents = list()
 		self.population = list()
@@ -58,8 +58,8 @@ class GeneticAlgorithm(object):
 		self.total_bits = 0
 		self.function = None
 		self.metric_name = None
-		self.crossover_types = {'npoint': self.npoint_crossover, 'binary': self.binary_crossover}
-		self.crossover_ind = self.crossover_types.get(self.cxtype, self.npoint_crossover)
+		self.crossover_type = {'npoint': self.npoint_crossover, 'binary': self.binary_crossover}
+		self.crossover_ind = self.crossover_type.get(self.cx_type, self.npoint_crossover)
 		self.compare = op.lt if minmax == 'min' else op.gt
 		self.reverse = False if minmax == 'min' else True
 		self.history = list()
@@ -83,8 +83,8 @@ class GeneticAlgorithm(object):
 			ind = self.initialize_ind()
 			self.population.append(ind)
 		# Mutation adjustment
-		if self.mutpb < 0.0:
-			self.mutpb = 1.0 / self.total_bits
+		if self.mut_pr < 0.0:
+			self.mut_pr = 1.0 / self.total_bits
 
 	def initialize_ind(self):
 		ind = Individual()
@@ -146,7 +146,7 @@ class GeneticAlgorithm(object):
 		for i in range(0, self.pop_size, 2):
 			idx1 = self.parents[i]
 			idx2 = self.parents[i + 1]
-			if np.random.rand() < self.cxpb:
+			if np.random.rand() < self.cx_pr:
 				self.crossover_ind(self.population[idx1], self.population[idx2])
 			else:
 				self.population.append(deepcopy(self.population[idx1]))
@@ -201,7 +201,7 @@ class GeneticAlgorithm(object):
 			name = self.variable_name[i]
 			bits = self.variable_info[name]['bits']
 			for j in range(bits):
-				if np.random.rand() < self.mutpb:
+				if np.random.rand() < self.mut_pr:
 					ind.genotype[i][j] = 1 - ind.genotype[i][j]
 
 	def sort_population(self, pop):

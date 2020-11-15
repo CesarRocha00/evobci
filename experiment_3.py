@@ -163,8 +163,8 @@ class Experiment_3(object):
 		self.best_mod = None
 		self.best_ind = None
 		# Initialize algorithm
-		self.alg = GeneticAlgorithm(self.kwargs['pop_size'], self.kwargs['num_gen'], self.kwargs['cxpb'],
-							   self.kwargs['cxtype'], mutpb=self.kwargs['mutpb'], minmax='max')
+		self.alg = GeneticAlgorithm(self.kwargs['pop_size'], self.kwargs['num_gen'], self.kwargs['cx_pr'],
+							   self.kwargs['cx_type'], mut_pr=self.kwargs['mut_pr'], minmax='max')
 		# Add variables
 		self.alg.add_variable('overlap', bounds=(0.1, 0.9), precision=2)
 		for name in self.variable_names:
@@ -215,12 +215,12 @@ class Experiment_3(object):
 @click.argument('INPUTFILE', type=click.Path(exists=True, dir_okay=False), required=True)
 @click.argument('OUTPUTDIR', type=click.Path(exists=True, file_okay=False), required=False)
 @click.option('-n', 'num_exe', type=click.IntRange(1, None), required=True, help='Number of executions.')
-@click.option('-p', 'pop_size', type=click.IntRange(2, None), required=True, help='Size of the entire population.')
-@click.option('-g', 'num_gen', type=click.IntRange(0, None), required=True, help='Number of generations to evolve.')
-@click.option('-cp', 'cxpb', type=click.FloatRange(0.0, 0.9), default=0.9, show_default=True, help='Crossover probability.')
-@click.option('-ct', 'cxtype', type=click.Choice(['npoint', 'binary'], case_sensitive=True), default='binary', show_default=True, help='Type of crossover to be applied.')
+@click.option('-ps', 'pop_size', type=click.IntRange(2, None), required=True, help='Size of the entire population.')
+@click.option('-ng', 'num_gen', type=click.IntRange(0, None), required=True, help='Number of generations to evolve.')
+@click.option('-cp', 'cx_pr', type=click.FloatRange(0.0, 0.9), default=0.9, show_default=True, help='Crossover probability.')
+@click.option('-ct', 'cx_type', type=click.Choice(['npoint', 'binary'], case_sensitive=True), default='binary', show_default=True, help='Type of crossover to be applied.')
 @click.option('-np', 'num_pts', type=click.IntRange(1, None), default=1, show_default=True, help='Number of crossover points.')
-@click.option('-mp', 'mutpb', type=click.FloatRange(-1.0, 0.9), default=-1.0, show_default=True, help='Mutation probability. Values less than 0 means uniform mutation.')
+@click.option('-mp', 'mut_pr', type=click.FloatRange(-1.0, 0.9), default=-1.0, show_default=True, help='Mutation probability. Values less than 0 means uniform mutation.')
 @click.option('-e', 'epochs', type=click.IntRange(1, None), default=10, show_default=True, help='Epochs for ANN training.')
 @click.option('-ts', 'train_size', type=click.FloatRange(0.1, 0.9), default=0.7, show_default=True, help='Split ratio for training and validation.')
 def main(**kwargs):
