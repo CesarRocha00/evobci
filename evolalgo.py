@@ -41,7 +41,7 @@ class Individual(object):
 
 class GeneticAlgorithm(object):
 	"""docstring for GeneticAlgorithm"""
-	def __init__(self, pop_size=2, num_gen=0, cx_pr=0.9, cx_type='npoint', num_pts=1, mut_pr=-1.0, minmax='min', seed=None):
+	def __init__(self, pop_size=2, num_gen=0, cx_pr=0.9, cx_type='npoint', num_pts=1, mut_pr=1.0, minmax='min', seed=None):
 		super(GeneticAlgorithm, self).__init__()
 		self.pop_size = pop_size
 		self.num_gen = num_gen
@@ -83,8 +83,8 @@ class GeneticAlgorithm(object):
 			ind = self.initialize_ind()
 			self.population.append(ind)
 		# Mutation adjustment
-		if self.mut_pr < 0.0:
-			self.mut_pr = 1.0 / self.total_bits
+		if self.mut_pr >= 1.0:
+			self.mut_pr = self.mut_pr / self.total_bits
 
 	def initialize_ind(self):
 		ind = Individual()
