@@ -144,7 +144,7 @@ class Experiment_1(object):
 		self.best_ind = None
 		# Initialize algorithm
 		self.alg = GeneticAlgorithm(self.kwargs['pop_size'], self.kwargs['num_gen'], self.kwargs['cx_pr'],
-							   self.kwargs['cx_type'], mut_pr=self.kwargs['mut_pr'], minmax='max')
+							        self.kwargs['cx_type'], mut_pr=self.kwargs['mut_pr'], minmax='max')
 		# Add variables
 		self.alg.add_variable('size', bounds=(50, 250), precision=0)
 		self.alg.add_variable('overlap', bounds=(0.1, 0.9), precision=2)
@@ -159,7 +159,7 @@ class Experiment_1(object):
 		self.data_preprocessing()
 		widgets = ['Execution: ', progressbar.SimpleProgress(), ' [', progressbar.Percentage(), ']', 
 		            progressbar.Bar(), progressbar.AbsoluteETA()]
-		bar = progressbar.ProgressBar(widgets=widgets, max_value=self.kwargs['num_exe']).start()
+		bar = progressbar.ProgressBar(widgets=widgets, max_value=self.kwargs['num_exe'], redirect_stdout=True).start()
 		for i in range(self.kwargs['num_exe']):
 			self.run_algorithm()
 			if self.kwargs['outputdir'] is not None:
