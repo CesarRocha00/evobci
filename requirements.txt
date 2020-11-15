@@ -3,7 +3,7 @@ h5py==2.10.0
 matplotlib==3.3.3
 numpy==1.18.5
 pandas==1.1.4
-progressbar33==2.4
+progressbar2==3.53.1
 pylsl==1.13.6
 PyQt5==5.15.1
 pyqtgraph==0.11.0
