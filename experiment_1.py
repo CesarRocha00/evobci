@@ -201,7 +201,7 @@ class Experiment_1(object):
 @click.option('-cp', 'cx_pr', type=click.FloatRange(0.0, 0.9), default=0.9, show_default=True, help='Crossover probability.')
 @click.option('-ct', 'cx_type', type=click.Choice(['npoint', 'binary'], case_sensitive=True), default='binary', show_default=True, help='Type of crossover to be applied.')
 @click.option('-np', 'num_pts', type=click.IntRange(1, None), default=1, show_default=True, help='Number of crossover points.')
-@click.option('-mp', 'mut_pr', type=click.FloatRange(-1.0, 0.9), default=-1.0, show_default=True, help='Mutation probability. Values less than 0 means uniform mutation.')
+@click.option('-mp', 'mut_pr', type=click.FloatRange(0.0, None), default=1.0, show_default=True, help='Mutation probability. Values greater than 1 imply uniform mutation.')
 @click.option('-e', 'epochs', type=click.IntRange(1, None), default=10, show_default=True, help='Epochs for ANN training.')
 @click.option('-ts', 'train_size', type=click.FloatRange(0.1, 0.9), default=0.7, show_default=True, help='Split ratio for training and validation.')
 def main(**kwargs):
