@@ -41,7 +41,7 @@ class Individual(object):
 
 class GeneticAlgorithm(object):
 	"""docstring for GeneticAlgorithm"""
-	def __init__(self, pop_size=2, num_gen=0, cx_pr=0.9, cx_type='npoint', num_pts=1, mut_pr=1.0, minmax='min', seed=None):
+	def __init__(self, pop_size=2, num_gen=0, cx_pr=0.9, cx_type='npoint', num_pts=1, mut_pr=1.0, mut_down=(None, None), minmax='min', seed=None):
 		super(GeneticAlgorithm, self).__init__()
 		self.pop_size = pop_size
 		self.num_gen = num_gen
@@ -49,6 +49,9 @@ class GeneticAlgorithm(object):
 		self.cx_type = cx_type
 		self.num_pts = num_pts
 		self.mut_pr = mut_pr
+		self.mut_down = mut_down
+		self.down_rate = 0
+		self.gen_lim = 0
 		self.minmax = minmax
 		self.parents = list()
 		self.population = list()
@@ -82,9 +85,6 @@ class GeneticAlgorithm(object):
 		for i in range(self.pop_size):
 			ind = self.initialize_ind()
 			self.population.append(ind)
-		# Mutation adjustment
-		if self.mut_pr >= 1.0:
-			self.mut_pr = self.mut_pr / self.total_bits
 
 	def initialize_ind(self):
 		ind = Individual()
@@ -93,6 +93,16 @@ class GeneticAlgorithm(object):
 			bits = self.variable_info[name]['bits']
 			ind.genotype.append(np.random.randint(2, size=bits))
 		return ind
+
+	def mutation_adjustment(self):
+		if self.mut_pr >= 1.0:
+			self.mut_pr = self.mut_pr / self.total_bits
+		if None not in self.mut_down:
+			fin_mut = self.mut_down[0]
+			self.gen_lim = self.mut_down[1]
+			fin_mut = fin_mut / self.total_bits if fin_mut >= 1.0 else fin_mut
+			dist = self.mut_pr - fin_mut if fin_mut > 0.0 and fin_mut < self.mut_pr else 0
+			self.down_rate = dist / self.gen_lim if self.gen_lim < self.num_gen else 0
 
 	def decode_pop(self, pop):
 		for ind in pop:
@@ -216,6 +226,7 @@ class GeneticAlgorithm(object):
 		duration = perf_counter()
 		elapsed = perf_counter()
 		self.initialize_pop()
+		self.mutation_adjustment()
 		self.decode_pop(self.population)
 		self.evaluation_pop(self.population)
 		self.sort_population(self.population)
@@ -235,6 +246,8 @@ class GeneticAlgorithm(object):
 			fbest = self.population[0]
 			if self.compare(fbest.fitness[self.metric_name], gbest.fitness[self.metric_name]):
 				gbest = deepcopy(fbest)
+			if i < self.gen_lim:
+				self.mut_pr -= self.down_rate
 			elapsed = perf_counter() - elapsed
 			self.send_to_history(gbest, elapsed)
 			if verbose > 1:
