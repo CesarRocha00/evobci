@@ -379,3 +379,13 @@ class BCISimulator(QMainWindow):
 		self.leftRealLabel.setPixmap(self.pixmap['gray']['real'])
 		self.rightRealLabel.setPixmap(self.pixmap['gray']['real'])
 		self.rightPredLabel.setPixmap(self.pixmap['gray']['pred'])
+
+
+import sys
+from PyQt5.QtWidgets import QApplication
+
+if __name__ == '__main__':
+	app = QApplication(sys.argv)
+	view = BCISimulator()
+	view.show()
+	sys.exit(app.exec_())

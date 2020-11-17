@@ -265,3 +265,13 @@ class EEGStudio(QMainWindow):
 		path += '_Label.csv'
 		self.D.to_csv(path, index=False)
 		self.statusBar.showMessage('Labeled EEG file saved as {}'.format(path))
+
+
+import sys
+from PyQt5.QtWidgets import QApplication
+
+if __name__ == '__main__':
+	app = QApplication(sys.argv)
+	view = EEGStudio()
+	view.show()
+	sys.exit(app.exec_())

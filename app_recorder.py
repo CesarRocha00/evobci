@@ -171,3 +171,13 @@ class EEGRecorder(QMainWindow):
 		file = QFile('video.hdf5')
 		file.rename(videoFullPath)
 		self.statusBar.showMessage('Video file saved as {}'.format(videoFullPath))
+
+
+import sys
+from PyQt5.QtWidgets import QApplication
+
+if __name__ == '__main__':
+	app = QApplication(sys.argv)
+	view = EEGRecorder()
+	view.show()
+	sys.exit(app.exec_())
