@@ -17,6 +17,8 @@ class EEGStudio(QMainWindow):
 		self.X = None
 		self.fs = 0
 		self.label = list()
+		self.markPos = list()
+		self.markItem = list()
 		self.maxDuration = 0
 		# Main widgets
 		self.fileDialog = FilePathDialog('EEG file:', 'Open file', 'EEG files (*.csv)')
@@ -209,6 +211,8 @@ class EEGStudio(QMainWindow):
 		self.eegViewer.configure(channel, color, self.fs * 1.2, self.fs)
 		self.eegViewer.plotData(self.X)
 		self.eegViewer.setPosition(0)
+		self.markPos.clear()
+		self.markItem.clear()
 		marks = np.where(self.label == 1)[0]
 		for index in marks:
 			self.addLabel(index)
@@ -258,10 +262,23 @@ class EEGStudio(QMainWindow):
 		if position < 0 or position > self.D.index.size:
 			self.statusBar.showMessage('Index {} does not exist!'.format(position))
 		else:
-			self.eegViewer.addMark(position)
+			mark = self.eegViewer.addMark(position)
+			mark.sigPositionChangeFinished.connect(self.markMoved)
+			self.markPos.append(position)
+			self.markItem.append(mark)
 			self.label[position] = 1
 			self.indexEdit.setText('')
 			self.playButton.setFocus()
+
+	def markMoved(self):
+		markPos = np.array(self.markPos, dtype=int)
+		linePos = np.array([line.getXPos() for line in self.markItem], dtype=int)
+		moved = np.where(markPos != linePos)[0]
+		old_index = markPos[moved]
+		self.label[old_index] = 0
+		new_index = linePos[moved]
+		self.label[new_index] = 1
+		self.markPos = linePos.tolist()
 
 	def saveLabels(self):
 		self.D['Label'] = self.label
