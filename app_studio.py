@@ -203,10 +203,15 @@ class EEGStudio(QMainWindow):
 		notch(self.X, self.fs, param['notch'], numCh)
 		bandpass(self.X, self.fs, param['low'], param['high'], param['order'], numCh)
 		self.X[self.X.columns[:numCh]] = MinMaxScaler().fit_transform(self.X[self.X.columns[:numCh]])
-		self.label = np.array([0] * self.D.index.size)
+		self.label = np.zeros((self.X.index.size,), dtype=int)
+		if 'Label' in self.X.columns:
+			self.label = self.X['Label'].to_numpy(copy=True)
 		self.eegViewer.configure(channel, color, self.fs * 1.2, self.fs)
 		self.eegViewer.plotData(self.X)
 		self.eegViewer.setPosition(0)
+		marks = np.where(self.label == 1)[0]
+		for index in marks:
+			self.addLabel(index)
 		self.addButton.setEnabled(True)
 		self.playButton.setEnabled(True)
 		self.playButton.setFocus()
@@ -248,8 +253,8 @@ class EEGStudio(QMainWindow):
 		self.eegViewer.setPosition(position)
 		self.playButton.setFocus()
 
-	def addLabel(self):
-		position = int(self.indexEdit.text().strip())
+	def addLabel(self, index=None):
+		position = int(self.indexEdit.text().strip()) if index is None else index
 		if position < 0 or position > self.D.index.size:
 			self.statusBar.showMessage('Index {} does not exist!'.format(position))
 		else:
