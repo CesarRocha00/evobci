@@ -338,7 +338,8 @@ class EEGViewer(QThread):
 
 	def addMark(self, position):
 		for canvas in self.plotItem:
-			canvas.addLine(x=position)
+			pen = mkPen(color='r', width=3, style=Qt.DashLine)
+			canvas.addLine(x=position, pen=pen)
 
 	def setPosition(self, position):
 		self.window[0] = position - self.hsize
