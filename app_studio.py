@@ -279,6 +279,7 @@ class EEGStudio(QMainWindow):
 		new_index = linePos[moved]
 		self.label[new_index] = 1
 		self.markPos = linePos.tolist()
+		self.statusBar.showMessage(f'Label moved from {old_index} to {new_index}')
 
 	def saveLabels(self):
 		self.D['Label'] = self.label
