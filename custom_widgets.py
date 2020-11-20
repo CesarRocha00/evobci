@@ -145,7 +145,7 @@ class CheckBoxPanel(QGroupBox):
 		row = 0
 		colLimit = self.columns
 		for i, label in enumerate(names):
-			self.color[label] = '#{:06x}'.format(np.random.randint(0, 0xFFFFFF))
+			self.color[label] = f'#{np.random.randint(0x000000, 0xFFFFFF):06x}'
 			option = QCheckBox(label)
 			option.setStyleSheet('background: {}'.format(self.color[label]))
 			option.stateChanged.connect(self.newChange)
