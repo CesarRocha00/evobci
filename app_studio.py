@@ -52,7 +52,7 @@ class EEGStudio(QMainWindow):
 		self.saveButton.clicked.connect(self.saveLabels)
 		self.addButton = QPushButton('Add')
 		self.addButton.setEnabled(False)
-		self.addButton.clicked.connect(self.addLabel)
+		self.addButton.clicked.connect(lambda: self.addLabel(None))
 		self.applyButton = QPushButton('Apply')
 		self.applyButton.setIcon(self.icon.standardIcon(QStyle.SP_DialogApplyButton))
 		self.applyButton.setEnabled(False)
