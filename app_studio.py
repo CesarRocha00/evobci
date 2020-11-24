@@ -200,6 +200,7 @@ class EEGStudio(QMainWindow):
 		param = self.filteringForm.getValues()
 		channel = self.channelPanel.getChecked()
 		if len(channel) == 0:
+			self.statusBar.showMessage('You must select at least one channel')
 			return
 		color = self.channelPanel.getColors()
 		numCh = param['n_channels']
