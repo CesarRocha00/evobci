@@ -199,6 +199,8 @@ class EEGStudio(QMainWindow):
 		self.X = self.D.copy()
 		param = self.filteringForm.getValues()
 		channel = self.channelPanel.getChecked()
+		if len(channel) == 0:
+			return
 		color = self.channelPanel.getColors()
 		numCh = param['n_channels']
 		self.fs = param['fs']
