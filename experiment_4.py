@@ -232,7 +232,6 @@ class Experiment_4(object):
 @click.option('-e', 'epochs', type=click.IntRange(1, None), default=10, show_default=True, help='Epochs for ANN training.')
 @click.option('-ts', 'train_size', type=click.FloatRange(0.1, 0.9), default=0.7, show_default=True, help='Split ratio for training and validation.')
 def main(**kwargs):
-	print(kwargs)
 	expt = Experiment_4(kwargs)
 	expt.execute()
 		
