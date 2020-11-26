@@ -164,7 +164,8 @@ class Experiment_3(object):
 		self.best_ind = None
 		# Initialize algorithm
 		self.alg = GeneticAlgorithm(self.kwargs['pop_size'], self.kwargs['num_gen'], self.kwargs['cx_pr'],
-							        self.kwargs['cx_type'], mut_pr=self.kwargs['mut_pr'], minmax='max')
+							        self.kwargs['cx_type'], mut_pr=self.kwargs['mut_pr'], mut_down=self.kwargs['mut_down'],
+							        minmax='max')
 		# Add variables
 		self.alg.add_variable('overlap', bounds=(0.1, 0.9), precision=2)
 		for name in self.variable_names:
@@ -221,6 +222,7 @@ class Experiment_3(object):
 @click.option('-ct', 'cx_type', type=click.Choice(['npoint', 'binary'], case_sensitive=True), default='binary', show_default=True, help='Type of crossover to be applied.')
 @click.option('-np', 'num_pts', type=click.IntRange(1, None), default=1, show_default=True, help='Number of crossover points.')
 @click.option('-mp', 'mut_pr', type=click.FloatRange(0.0, None), default=1.0, show_default=True, help='Mutation probability. Values greater than 1 imply uniform mutation.')
+@click.option('-md', 'mut_down', type=click.Tuple([float, int]), default=(None, None), show_default=True, help='Final mutation and generation for variable mutation probability.')
 @click.option('-e', 'epochs', type=click.IntRange(1, None), default=10, show_default=True, help='Epochs for ANN training.')
 @click.option('-ts', 'train_size', type=click.FloatRange(0.1, 0.9), default=0.7, show_default=True, help='Split ratio for training and validation.')
 def main(**kwargs):
