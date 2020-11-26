@@ -223,7 +223,7 @@ class Experiment_4(object):
 @click.option('-n', 'num_exe', type=click.IntRange(1, None), required=True, help='Number of executions.')
 @click.option('-ps', 'pop_size', type=click.IntRange(2, None), required=True, help='Size of the entire population.')
 @click.option('-ng', 'num_gen', type=click.IntRange(0, None), required=True, help='Number of generations to evolve.')
-@click.option('-cp', 'cx_pr', type=click.FloatRange(0.0, 0.9), default=0.9, show_default=True, help='Crossover probability.')
+@click.option('-cp', 'cx_pr', type=click.FloatRange(0.0, 1.0), default=0.9, show_default=True, help='Crossover probability.')
 @click.option('-ct', 'cx_type', type=click.Choice(['npoint', 'binary'], case_sensitive=True), default='binary', show_default=True, help='Type of crossover to be applied.')
 @click.option('-np', 'num_pts', type=click.IntRange(1, None), default=1, show_default=True, help='Number of crossover points.')
 @click.option('-mp', 'mut_pr', type=click.FloatRange(0.0, None), default=1.0, show_default=True, help='Mutation probability. Values greater than 1 imply uniform mutation.')
