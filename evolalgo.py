@@ -94,16 +94,6 @@ class GeneticAlgorithm(object):
 			ind.genotype.append(np.random.randint(2, size=bits))
 		return ind
 
-	def mutation_adjustment(self):
-		if self.mut_pr >= 1.0:
-			self.mut_pr = self.mut_pr / self.total_bits
-		if None not in self.mut_down:
-			fin_mut = self.mut_down[0]
-			self.gen_lim = self.mut_down[1]
-			fin_mut = fin_mut / self.total_bits if fin_mut >= 1.0 else fin_mut
-			dist = self.mut_pr - fin_mut if fin_mut > 0.0 and fin_mut < self.mut_pr else 0
-			self.down_rate = dist / self.gen_lim if self.gen_lim < self.num_gen else 0
-
 	def decode_pop(self, pop):
 		for ind in pop:
 			self.decode_ind(ind)
@@ -214,6 +204,20 @@ class GeneticAlgorithm(object):
 				if np.random.rand() < self.mut_pr:
 					ind.genotype[i][j] = 1 - ind.genotype[i][j]
 
+	def mutation_setup(self):
+		if self.mut_pr >= 1.0:
+			self.mut_pr = self.mut_pr / self.total_bits
+		if None not in self.mut_down:
+			fin_mut = self.mut_down[0]
+			self.gen_lim = self.mut_down[1]
+			fin_mut = fin_mut / self.total_bits if fin_mut >= 1.0 else fin_mut
+			dist = self.mut_pr - fin_mut if fin_mut > 0.0 and fin_mut < self.mut_pr else 0
+			self.down_rate = dist / self.gen_lim if self.gen_lim <= self.num_gen else 0
+
+	def mutation_adjustment(self, g):
+		if g < self.gen_lim:
+			self.mut_pr -= self.down_rate
+
 	def sort_population(self, pop):
 		pop.sort(key=lambda ind: ind.fitness[self.metric_name], reverse=self.reverse)
 
@@ -226,7 +230,6 @@ class GeneticAlgorithm(object):
 		duration = perf_counter()
 		elapsed = perf_counter()
 		self.initialize_pop()
-		self.mutation_adjustment()
 		self.decode_pop(self.population)
 		self.evaluation_pop(self.population)
 		self.sort_population(self.population)
@@ -235,6 +238,7 @@ class GeneticAlgorithm(object):
 		self.send_to_history(gbest, elapsed)
 		if verbose > 1:
 			self.display_progress(0, gbest, elapsed, display)
+		self.mutation_setup()
 		for i in range(self.num_gen):
 			elapsed = perf_counter()
 			self.tournament_selection()
@@ -246,9 +250,8 @@ class GeneticAlgorithm(object):
 			fbest = self.population[0]
 			if self.compare(fbest.fitness[self.metric_name], gbest.fitness[self.metric_name]):
 				gbest = deepcopy(fbest)
-			if i < self.gen_lim:
-				self.mut_pr -= self.down_rate
 			elapsed = perf_counter() - elapsed
+			self.mutation_adjustment(i)
 			self.send_to_history(gbest, elapsed)
 			if verbose > 1:
 				self.display_progress(i + 1, gbest, elapsed, display)
@@ -264,7 +267,6 @@ class GeneticAlgorithm(object):
 						'elapsed': f"{elapsed}s"}
 		for item in display:
 			output += display_dict[item] + '\t'
-		print(output)
 
 	def display_summary(self, duration):
 		gen_avg = duration / (self.num_gen + 1)
