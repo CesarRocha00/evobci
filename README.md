@@ -1,3 +1,3 @@
 # BCI Development Toolkit
 
-This is a set of graphical tools for BCI development and testing.
+This is a set of CLI and GUI tools for BCI development and testing.
