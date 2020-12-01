@@ -38,6 +38,11 @@ class Individual(object):
 		self.phenotype = dict()
 		self.fitness = None
 
+	def to_series(self):
+		tmp = deepcopy(self.phenotype)
+		tmp.update(deepcopy(self.fitness))
+		return pd.Series(tmp)
+
 
 class GeneticAlgorithm(object):
 	"""docstring for GeneticAlgorithm"""
@@ -65,7 +70,7 @@ class GeneticAlgorithm(object):
 		self.crossover_ind = self.crossover_type.get(self.cx_type, self.npoint_crossover)
 		self.compare = op.lt if minmax == 'min' else op.gt
 		self.reverse = False if minmax == 'min' else True
-		self.history = list()
+		self.history = None
 		self.seed = seed if seed != None and seed >= 0 else np.random.randint(10000000)
 		np.random.seed(self.seed)
 
@@ -225,9 +230,8 @@ class GeneticAlgorithm(object):
 		self.sort_population(self.population)
 		self.population = self.population[:self.pop_size]
 
-	def execute(self, verbose=1, display=['fitness', 'phenotype', 'elapsed']):
-		self.history.clear()
-		duration = perf_counter()
+	def execute(self, verbose=1, display=['fitness', 'elapsed']):
+		self.history = pd.DataFrame()
 		elapsed = perf_counter()
 		self.initialize_pop()
 		self.decode_pop(self.population)
@@ -237,7 +241,7 @@ class GeneticAlgorithm(object):
 		elapsed = perf_counter() - elapsed
 		self.send_to_history(gbest, elapsed)
 		if verbose > 1:
-			self.display_progress(0, gbest, elapsed, display)
+			self.display_progress(display)
 		self.mutation_setup()
 		for i in range(self.num_gen):
 			elapsed = perf_counter()
@@ -254,48 +258,27 @@ class GeneticAlgorithm(object):
 			self.mutation_adjustment(i)
 			self.send_to_history(gbest, elapsed)
 			if verbose > 1:
-				self.display_progress(i + 1, gbest, elapsed, display)
-		duration = perf_counter() - duration
+				self.display_progress(display)
 		if verbose > 0:
-			self.display_summary(duration)
+			self.display_summary()
 		return gbest
 
-	def display_progress(self, gen, ind, elapsed, display):
-		output = f"[{gen}]\t"
-		display_dict = {'fitness': f"f(x) = {ind.fitness[self.metric_name]}",
-						'phenotype': f"{ind.phenotype}",
-						'elapsed': f"{elapsed}s"}
-		for item in display:
-			output += display_dict[item] + '\t'
-
-	def display_summary(self, duration):
-		gen_avg = duration / (self.num_gen + 1)
-		ind_avg = duration / (self.pop_size * (self.num_gen + 1))
-		template = "Elapsed time: {}s\nAvg. time per generation: {}s\nAvg. time per individual: {}s"
-		print(template.format(duration, gen_avg, ind_avg))
-
 	def send_to_history(self, ind, elapsed):
-		entry = [deepcopy(ind), elapsed]
-		self.history.append(entry)
+		tmp = ind.to_series()
+		tmp['elapsed'] = elapsed
+		tmp.rename({self.metric_name: 'fitness'}, inplace=True)
+		self.history = self.history.append(tmp.to_frame().T, ignore_index=True)
+
+	def display_progress(self, display):
+		print(self.history.tail(1)[display])
+
+	def display_summary(self):
+		print(self.history.describe())
 
 	def get_seed(self):
 		return self.seed
 
 	def save(self, filepath, include_initial_pop=False):
-		history = self.history if include_initial_pop else self.history[1:]
-		columns = deepcopy(self.variable_name)
-		metric_name = list(self.population[0].fitness.keys())
-		metric_name[metric_name.index(self.metric_name)] = 'fitness'
-		columns.extend(metric_name)
-		columns.append('elapsed')
-		data = list()
-		for entry in history:
-			ind = entry[0]
-			elapsed = entry[1]
-			row = list(ind.phenotype.values())
-			row.extend(list(ind.fitness.values()))
-			row.append(elapsed)
-			data.append(row)
-		D = pd.DataFrame(data=data, columns=columns)
-		D.to_csv(filepath, index=False)
+		i = 0 if include_initial_pop else 1
+		self.history.iloc[i:].to_csv(filepath, index=False)
 		
