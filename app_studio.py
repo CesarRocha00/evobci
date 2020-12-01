@@ -3,7 +3,7 @@ import pandas as pd
 from PyQt5.QtCore import Qt
 from eeg_utils import notch, bandpass
 from sklearn.preprocessing import MinMaxScaler
-from custom_widgets import FilePathDialog, VideoPlayer, CheckBoxPanel, FilteringForm, EEGViewer
+from gui_custom_widgets import FilePathDialog, VideoPlayer, CheckBoxPanel, FilteringForm, EEGViewer
 from PyQt5.QtWidgets import QMainWindow, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QStatusBar, QLineEdit, QStyle, QGroupBox, QGridLayout, QSlider, QLabel
 
 class EEGStudio(QMainWindow):

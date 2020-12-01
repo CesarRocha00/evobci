@@ -3,7 +3,7 @@ from datetime import datetime
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QDir, QFile
 from PyQt5.QtWidgets import QMainWindow, QFileDialog, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QStatusBar
-from custom_widgets import FilePathDialog, LSLForm, PersonalInformationForm, VideoPlayer, LSLClient, OCVWebcam
+from gui_custom_widgets import FilePathDialog, LSLForm, PersonalInformationForm, VideoPlayer, LSLClient, OCVWebcam
 
 class EEGRecorder(QMainWindow):
 	"""docstring for EEGRecorder"""

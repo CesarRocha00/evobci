@@ -5,7 +5,7 @@ from neuralnet import MLP_NN
 from PyQt5.QtGui import QPixmap
 from sklearn.preprocessing import MinMaxScaler
 from eeg_utils import extract_windows, max_window_size, notch, bandpass
-from custom_widgets import FilePathDialog, CheckBoxPanel, FilteringForm, RadioButtonPanel, EEGViewer
+from gui_custom_widgets import FilePathDialog, CheckBoxPanel, FilteringForm, RadioButtonPanel, EEGViewer
 from PyQt5.QtWidgets import QMainWindow, QLineEdit, QLabel, QPlainTextEdit, QCheckBox, QWidget, QStyle, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QGridLayout, QStatusBar
 
 class BCISimulator(QMainWindow):
