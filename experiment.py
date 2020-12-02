@@ -1,6 +1,5 @@
 import click
 import numpy as np
-import progressbar
 import pandas as pd
 from pathlib import Path
 from neuralnet import MLP_NN
@@ -45,7 +44,6 @@ class Experiment(object):
 		self.channel_total = None
 		self.best_val = None
 		self.best_mod = None
-		self.best_ind = None
 		self.alg = None
 
 	def data_preprocessing(self):
@@ -162,10 +160,9 @@ class Experiment(object):
 			self.best_mod = model
 		return score
 
-	def run_algorithm(self):
+	def algorithm_setup(self):
 		self.best_val = None
 		self.best_mod = None
-		self.best_ind = None
 		# Initialize algorithm
 		self.alg = GeneticAlgorithm(self.kwargs['pop_size'], self.kwargs['num_gen'], self.kwargs['cx_pr'],
 							        self.kwargs['cx_type'], mut_pr=self.kwargs['mut_pr'], mut_down=self.kwargs['mut_down'],
@@ -178,30 +175,16 @@ class Experiment(object):
 			self.alg.add_variable(name, bounds=(0, 1), precision=0)
 		# Set the fitness function
 		self.alg.set_fitness_func(self.custom_fitness, self.metric)
-		# Execute and get the best individual
-		self.best_ind = self.alg.execute(verbose=0)
 		
 	def execute(self):
+		# Perform data preprocessing
 		self.data_preprocessing()
-		widgets = ['Execution: ', progressbar.SimpleProgress(), ' [', progressbar.Percentage(), ']', 
-		            progressbar.Bar(), progressbar.AbsoluteETA()]
-		bar = progressbar.ProgressBar(widgets=widgets, max_value=self.kwargs['num_exe'], redirect_stdout=True).start()
-		for i in range(self.kwargs['num_exe']):
-			self.run_algorithm()
-			if self.kwargs['outputdir'] is not None:
-				self.save_data(i + 1)
-			bar.update(i + 1)
-		bar.finish()
-
-	def save_data(self, id):
-		# Prepare the directories
-		path = self.prepare_directory()
-		# Save the history of the current execution
-		filename = path / f'execution_{id}.csv'
-		self.alg.save(str(filename))
-		# Save the best model of the current execution
-		filename = filename.with_suffix('.h5')
-		self.best_mod.save(str(filename))
+		# Prepare the algorithm parameters
+		self.algorithm_setup()
+		# Execute the genetic algorithm
+		self.alg.execute(verbose=0)
+		# Save the GA output and ANN model
+		self.save_data()
 
 	def prepare_directory(self):
 		dir_parts = [self.kwargs['outputdir']]
@@ -217,17 +200,30 @@ class Experiment(object):
 			path.mkdir(parents=True, exist_ok=True)
 		return path
 
+	def save_data(self):
+		# Prepare the directories
+		path = self.prepare_directory()
+		# Count total files in directory
+		count = len(list(path.glob('*.csv')))
+		# Define name of file
+		filename = f'execution_{count + 1}.csv'
+		# Save the history of the current execution
+		filepath = path.joinpath(filename)
+		self.alg.save(filepath)
+		# Save the best model of the current execution
+		filepath = filepath.with_suffix('.h5')
+		self.best_mod.save(str(filepath))
+
 
 @click.command()
 @click.argument('INPUTFILE', type=click.Path(exists=True, dir_okay=False), required=True)
-@click.argument('OUTPUTDIR', type=click.Path(exists=True, file_okay=False), required=False)
-@click.option('-n', 'num_exe', type=click.IntRange(1, None), required=True, help='Number of executions.')
+@click.argument('OUTPUTDIR', type=click.Path(exists=True, file_okay=False), required=True)
 @click.option('-ps', 'pop_size', type=click.IntRange(2, None), required=True, help='Size of the entire population.')
 @click.option('-ng', 'num_gen', type=click.IntRange(0, None), required=True, help='Number of generations to evolve.')
 @click.option('-cp', 'cx_pr', type=click.FloatRange(0.0, 1.0), default=0.9, show_default=True, help='Crossover probability.')
 @click.option('-ct', 'cx_type', type=click.Choice(['npoint', 'binary'], case_sensitive=True), default='binary', show_default=True, help='Type of crossover to be applied.')
 @click.option('-np', 'num_pts', type=click.IntRange(1, None), default=1, show_default=True, help='Number of crossover points.')
-@click.option('-mp', 'mut_pr', type=click.FloatRange(0.0, None), default=1.0, show_default=True, help='Mutation probability. Values greater than 1 imply uniform mutation.')
+@click.option('-mp', 'mut_pr', type=click.FloatRange(0.0, None), default=10.0, show_default=True, help='Mutation probability. Values greater than 1 imply uniform mutation.')
 @click.option('-md', 'mut_down', type=click.Tuple([float, int]), default=(None, None), show_default=True, help='Final mutation and generation for variable mutation probability.')
 @click.option('-e', 'epochs', type=click.IntRange(1, None), default=10, show_default=True, help='Epochs for ANN training.')
 @click.option('-ts', 'train_size', type=click.FloatRange(0.1, 0.9), default=0.7, show_default=True, help='Split ratio for training and validation.')
