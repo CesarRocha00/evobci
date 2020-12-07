@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from PyQt5.QtCore import Qt
+from datetime import timedelta
 from eeg_utils import notch, bandpass
 from sklearn.preprocessing import MinMaxScaler
 from gui_custom_widgets import FilePathDialog, VideoPlayer, CheckBoxPanel, FilteringForm, EEGViewer
@@ -65,19 +66,18 @@ class EEGStudio(QMainWindow):
 		self.stopButton.setIcon(self.icon.standardIcon(QStyle.SP_MediaStop))
 		self.stopButton.clicked.connect(self.stop)
 		self.stopButton.setEnabled(False)
-		self.findTimeButton = QPushButton('Time')
-		self.findTimeButton.setEnabled(False)
-		self.findTimeButton.clicked.connect(self.findTime)
-		self.findIndexButton = QPushButton('Index')
-		self.findIndexButton.setEnabled(False)
-		self.findIndexButton.clicked.connect(self.findIndex)
+		self.syncButton = QPushButton('Sync')
+		self.syncButton.setEnabled(False)
+		self.syncButton.clicked.connect(self.syncTime)
 		# Slider
 		self.positionSlider = QSlider(Qt.Horizontal)
 		self.positionSlider.setRange(0, 1)
+		self.positionSlider.setTickPosition(2)
+		self.positionSlider.setTickInterval(60000)
 		self.positionSlider.sliderMoved.connect(self.setPosition)
 		# GroupBoxes
-		searchGBox = QGroupBox('Search')
-		searchGBox.setAlignment(Qt.AlignCenter)
+		syncGBox = QGroupBox('Synchronization')
+		syncGBox.setAlignment(Qt.AlignCenter)
 		labelingGBox = QGroupBox('Labeling')
 		labelingGBox.setAlignment(Qt.AlignCenter)
 		# Layouts
@@ -93,11 +93,10 @@ class EEGStudio(QMainWindow):
 		paramsLayout.addWidget(self.filteringForm, 7)
 		paramsLayout.addWidget(self.applyButton,1)
 
-		searchLayout = QGridLayout()
-		searchLayout.addWidget(self.timeEdit, 0, 0, 1, 2, alignment=Qt.AlignCenter)
-		searchLayout.addWidget(self.findTimeButton, 1, 0)
-		searchLayout.addWidget(self.findIndexButton, 1, 1)
-		searchGBox.setLayout(searchLayout)
+		syncLayout = QGridLayout()
+		syncLayout.addWidget(self.timeEdit)
+		syncLayout.addWidget(self.syncButton)
+		syncGBox.setLayout(syncLayout)
 
 		labelingLayout = QGridLayout()
 		labelingLayout.addWidget(QLabel('Index:'), 0, 0, alignment=Qt.AlignRight)
@@ -110,7 +109,7 @@ class EEGStudio(QMainWindow):
 		controlLayout.addWidget(self.playButton, 1)
 		controlLayout.addWidget(self.stopButton, 1)
 		controlLayout.addWidget(self.positionSlider, 15)
-		controlLayout.addWidget(searchGBox, 1)
+		controlLayout.addWidget(syncGBox, 1)
 
 		mainLayout = QVBoxLayout()
 		mainLayout.addLayout(sourceLayout, 1)
@@ -151,7 +150,7 @@ class EEGStudio(QMainWindow):
 	def setPosition(self, position):
 		if self.player.isVideoAvailable():
 			self.player.setPosition(position)
-			self.findIndex()
+			self.syncTime()
 
 	def durationChanged(self, duration):
 		self.maxDuration = duration
@@ -160,13 +159,9 @@ class EEGStudio(QMainWindow):
 
 	def positionChanged(self, position):
 		self.positionSlider.setValue(position)
-		s = position // 1000
-		m = s // 60
-		s = s % 60
-		h = m // 60
-		m = m % 60
-		elapsed = '{:02d}:{:02d}:{:02d}'.format(h,m,s)
-		self.timeEdit.setText(elapsed)
+		seconds = round(position / 1000)
+		time_str = str(timedelta(seconds=seconds))
+		self.timeEdit.setText(time_str)
 
 	def stateChanged(self, state):
 		if state == VideoPlayer.PlayingState:
@@ -181,8 +176,7 @@ class EEGStudio(QMainWindow):
 			self.statusBar.showMessage('Loading video...')
 		elif status == self.player.LoadedMedia:
 			self.player.stop()
-			self.findTimeButton.setEnabled(True)
-			self.findIndexButton.setEnabled(True)
+			self.syncButton.setEnabled(True)
 			self.statusBar.showMessage('Video was successfully loaded!')
 
 	def videoAvailableChanged(self, videoAvailable):
@@ -233,7 +227,7 @@ class EEGStudio(QMainWindow):
 			self.eegViewer.play()
 		else:
 			self.eegViewer.toggle()
-		self.findIndex()
+		self.syncTime()
 		self.playButton.setFocus()
 
 	def stop(self):
@@ -244,20 +238,18 @@ class EEGStudio(QMainWindow):
 		self.applyButton.setEnabled(True)
 
 	def timeToSeconds(self):
-		text = self.timeEdit.text()
-		h, m, s = text.split(':')
-		seconds = int(h) * 3600 + int(m) * 60 + int(s)
+		time_str = self.timeEdit.text()
+		time_obj = pd.to_timedelta(time_str)
+		seconds = int(time_obj.total_seconds())
 		return seconds
 
-	def findTime(self):
-		position = self.timeToSeconds() * 1000
-		if position <= self.maxDuration:
-			self.player.setPosition(position)
-		self.playButton.setFocus()
-
-	def findIndex(self):
-		position = self.timeToSeconds() * self.fs
-		self.eegViewer.setPosition(position)
+	def syncTime(self):
+		seconds = self.timeToSeconds()
+		position_vid = seconds * 1000
+		position_eeg = seconds * self.fs
+		if position_vid <= self.maxDuration:
+			self.player.setPosition(position_vid)
+		self.eegViewer.setPosition(position_eeg)
 		self.playButton.setFocus()
 
 	def addLabel(self, index=None):
