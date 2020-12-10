@@ -9,10 +9,10 @@ source /usr/local/Cluster-software/software/Python/3.8.6-GCCcore-10.2.0/bin/virt
 
 workon evobcienv
 
-#$ -t 1-31
-#$ -N eeg_nr_1
 #$ -cwd
+#$ -t 1-31
+#$ -N nr_2
 #$ -e $HOME/error/
 #$ -o $HOME/output/
 
-python3 $HOME/evobci/experiment.py -ps 50 -ng 200 -mp 10.0 -md 1.0 200 $HOME/evobci/input/NR_1.csv $HOME
+python3 $HOME/evobci/experiment.py -ps 50 -ng 200 -mp 10.0 -md 1.0 200 $HOME/evobci/input/NR_2.csv $HOME
