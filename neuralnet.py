@@ -1,8 +1,14 @@
 import os
+
 # Silence every warning of notice from tensorflow
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import tensorflow as tf
 from tensorflow import keras as kr
+
+# Set only two thread for ops (required to run on HPC-SGE)
+tf.config.threading.set_inter_op_parallelism_threads(2)
+tf.config.threading.set_intra_op_parallelism_threads(2)
 
 class MLP_NN(object):
 	"""docstring for MLP_NN"""
