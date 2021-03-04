@@ -188,8 +188,8 @@ class Experiment(object):
 
 	def prepare_directory(self):
 		dir_parts = [self.kwargs['outputdir']]
-		# Add the experiment name
-		dir_parts.append(self.__class__.__name__)
+		# Add the output folder name
+		dir_parts.append('output')
 		# Add the problem name (inputfile) keeping only the filename without extension
 		dir_parts.append(Path(self.kwargs['inputfile']).stem)
 		# Add the GA parameters (population and generations)
