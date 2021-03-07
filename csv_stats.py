@@ -25,7 +25,6 @@ def load_data(inputpath):
 		experiment = experiment.append(gbest, ignore_index=True)
 	experiment.insert(0, 'file_id', file_id)
 	experiment['elapsed'] = elapsed_time
-	experiment.sort_values(by='fitness', inplace=True, ignore_index=True)
 	return experiment
 
 def compute_stats(kwargs):
@@ -40,8 +39,11 @@ def compute_stats(kwargs):
 	experiment.insert(pos, 'points', total_points)
 	cols_to_int = experiment.columns[2:-2]
 	experiment[cols_to_int] = experiment[cols_to_int].applymap(int)
+	# Sort by file id or fitness value
+	this_col = 'fitness' if kwargs['sort'] else 'file_id'
+	experiment.sort_values(by=this_col, inplace=True, ignore_index=True)
 	# Verbose mode
-	if kwargs['v']:
+	if kwargs['verbose']:
 		print('# Summary')
 		print(experiment)
 	# Compute mean, std, median
@@ -54,7 +56,8 @@ def compute_stats(kwargs):
 
 @click.command()
 @click.argument('INPUTPATH', type=click.Path(exists=True, file_okay=False), required=True)
-@click.option('-v', is_flag=True, default=False, show_default=True, help='Verbose mode. Shows a summary of executions')
+@click.option('-v'. 'verbose', is_flag=True, default=False, show_default=True, help='Verbose mode. Shows a summary of executions')
+@click.option('-s'. 'sort', is_flag=True, default=False, show_default=True, help='Sorting mode. Sort the table by fitness value.')
 def main(**kwargs):
 	compute_stats(kwargs)
 
