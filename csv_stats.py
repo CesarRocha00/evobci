@@ -40,8 +40,9 @@ def compute_stats(kwargs):
 	cols_to_int = experiment.columns[2:-2]
 	experiment[cols_to_int] = experiment[cols_to_int].applymap(int)
 	# Sort by file id or fitness value
-	this_col = 'fitness' if kwargs['sort'] else 'file_id'
-	experiment.sort_values(by=this_col, inplace=True, ignore_index=True)
+	col_key = ['fitness', 'points'] if kwargs['sort'] else 'file_id'
+	order = [True, False] if kwargs['sort'] else True
+	experiment.sort_values(by=col_key, ascending=order, inplace=True, ignore_index=True)
 	# Display mode
 	print('# Best individual per execution')
 	if kwargs['display'] == 'plain':
