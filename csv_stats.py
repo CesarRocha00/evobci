@@ -45,10 +45,12 @@ def compute_stats(kwargs):
 	experiment.sort_values(by=col_key, ascending=order, inplace=True, ignore_index=True)
 	# Display mode
 	print('# Best individual per execution')
-	if kwargs['display'] == 'plain':
-		print(experiment)
-	else:
+	if kwargs['display'] == 'csv':
+		print(experiment.to_csv(index=False))
+	elif kwargs['display'] == 'latex':
 		print(experiment.to_latex(index=False))
+	else:
+		print(experiment)
 	# Compute mean, std, median
 	stats = pd.Series(dtype='float64')
 	stats['std'] = experiment['fitness'].std()
@@ -59,7 +61,7 @@ def compute_stats(kwargs):
 
 @click.command()
 @click.argument('INPUTPATH', type=click.Path(exists=True, file_okay=False), required=True)
-@click.option('-d', 'display', type=click.Choice(['plain', 'latex'], case_sensitive=True), default='plain', show_default=True, help='Display mode. Plain DataFrame or LaTeX table.')
+@click.option('-d', 'display', type=click.Choice(['plain', 'csv', 'latex'], case_sensitive=True), default='plain', show_default=True, help='Display mode. Plain DataFrame or LaTeX table.')
 @click.option('-s', 'sort', is_flag=True, default=False, show_default=True, help='Sorting mode. Sort the DataFrame by fitness value.')
 def main(**kwargs):
 	compute_stats(kwargs)
