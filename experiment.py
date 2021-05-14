@@ -6,7 +6,6 @@ from neuralnet import MLP_NN
 from evolalgo import GeneticAlgorithm
 from sklearn.preprocessing import MinMaxScaler
 from eeg_utils import notch, bandpass, split_train_test, extract_windows
-import matplotlib.pyplot as plt
 
 
 class Experiment(object):
