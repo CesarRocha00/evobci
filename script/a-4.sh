@@ -11,8 +11,8 @@ workon evobcienv
 
 #$ -cwd
 #$ -t 1-31
-#$ -N nr_2
+#$ -N a-4
 #$ -e $HOME/error/evobci/
 #$ -o $HOME/output/evobci/
 
-python3 $HOME/evobci/experiment.py -ps 50 -ng 200 -mp 10.0 -md 1.0 200 $HOME/evobci/input/NR_2.csv $HOME
+python3 $HOME/evobci/experiment.py -ps 50 -ng 200 -mp 10.0 -md 1.0 200 $HOME/evobci/input/A-4.csv $HOME
