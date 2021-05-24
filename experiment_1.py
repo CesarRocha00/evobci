@@ -8,7 +8,7 @@ from sklearn.preprocessing import MinMaxScaler
 from eeg_utils import notch, bandpass, split_train_test, extract_windows
 
 
-class Experiment(object):
+class Experiment_1(object):
 	"""
 	Optimization of 
 	- window overlap
@@ -30,7 +30,7 @@ class Experiment(object):
 	metric = 'F-Score'
 
 	def __init__(self, kwargs):
-		super(Experiment, self).__init__()
+		super(Experiment_1, self).__init__()
 		self.kwargs = kwargs
 		# Global variables
 		self.D_train = None
@@ -227,7 +227,7 @@ class Experiment(object):
 @click.option('-e', 'epochs', type=click.IntRange(1, None), default=10, show_default=True, help='Epochs for ANN training.')
 @click.option('-ts', 'train_size', type=click.FloatRange(0.1, 0.9), default=0.7, show_default=True, help='Split ratio for training and validation.')
 def main(**kwargs):
-	expt = Experiment(kwargs)
+	expt = Experiment_1(kwargs)
 	expt.execute()
 		
 
